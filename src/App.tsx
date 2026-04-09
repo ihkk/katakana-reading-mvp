@@ -2,13 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * Katakana Reading Experiment MVP
- * - Pure frontend React single-file prototype
- * - Flow: setup -> countdown -> recording -> survey -> done/export
- * - One audio file per trial
- * - Export: results.json + audio blobs downloaded individually (MVP)
+ * Flow:
+ * setup -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert) -> done
  */
 
-type Phase = 'setup' | 'countdown' | 'recording' | 'survey' | 'done';
+type Phase =
+  | 'setup'
+  | 'countdown'
+  | 'recording'
+  | 'meaningRecording'
+  | 'survey'
+  | 'done';
 
 type StimulusItem = {
   id: string;
@@ -16,7 +20,6 @@ type StimulusItem = {
 };
 
 type SurveyResponse = {
-  meaningText: string;
   familiarity: number;
   confidence: number;
   exposureFreq: number;
@@ -36,6 +39,13 @@ type TrialResult = {
   audioExt: string;
   audioFile: string;
   audioBlob: Blob;
+  meaningRecordStartMs: number;
+  meaningRecordStopMs: number;
+  meaningRtMs: number;
+  meaningAudioMime: string;
+  meaningAudioExt: string;
+  meaningAudioFile: string;
+  meaningAudioBlob: Blob;
   responses: SurveyResponse;
 };
 
@@ -48,10 +58,31 @@ type ExperimentMeta = {
   browser: string;
 };
 
+type TempReadingRecording = {
+  trialIndex: number;
+  stimulus: StimulusItem;
+  stimOnsetMs: number;
+  recordStartMs: number;
+  recordStopMs?: number;
+  audioBlob?: Blob;
+  audioMime?: string;
+  audioExt?: string;
+  audioFile?: string;
+};
+
+type TempMeaningRecording = {
+  startMs?: number;
+  stopMs?: number;
+  audioBlob?: Blob;
+  audioMime?: string;
+  audioExt?: string;
+  audioFile?: string;
+};
+
 const STIMULI: StimulusItem[] = [
   { id: 'w001', text: 'ナショナリズム' },
-  { id: 'w002', text: 'コミュニティ' },
-  { id: 'w003', text: 'モチベーション' },
+  // { id: 'w002', text: 'コミュニティ' },
+  // { id: 'w003', text: 'モチベーション' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -70,16 +101,19 @@ function getBrowserLabel(): string {
 
 function pickBestAudioMimeType(): { mimeType: string; ext: string } {
   const candidates = [
-    { mimeType: 'audio/mp4;codecs=mp4a.40.2', ext: 'm4a' },
     { mimeType: 'audio/webm;codecs=opus', ext: 'webm' },
     { mimeType: 'audio/webm', ext: 'webm' },
   ];
 
   for (const item of candidates) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(item.mimeType)) {
+    if (
+      typeof MediaRecorder !== 'undefined' &&
+      MediaRecorder.isTypeSupported(item.mimeType)
+    ) {
       return item;
     }
   }
+
   return { mimeType: '', ext: 'webm' };
 }
 
@@ -91,7 +125,10 @@ function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 3000);
 }
 
 function likertOptions() {
@@ -104,38 +141,81 @@ function App() {
   const [subjectId, setSubjectId] = useState('');
   const [streamReady, setStreamReady] = useState(false);
   const [permissionError, setPermissionError] = useState('');
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [currentTrialIndex, setCurrentTrialIndex] = useState(0);
   const [countdown, setCountdown] = useState(3);
   const [results, setResults] = useState<TrialResult[]>([]);
   const [meta, setMeta] = useState<ExperimentMeta | null>(null);
-  const [tempRecording, setTempRecording] = useState<{
-    trialIndex: number;
-    stimulus: StimulusItem;
-    stimOnsetMs: number;
-    recordStartMs: number;
-    recordStopMs?: number;
-    audioBlob?: Blob;
-    audioMime?: string;
-    audioExt?: string;
-    audioFile?: string;
-  } | null>(null);
+  const [tempReading, setTempReading] = useState<TempReadingRecording | null>(null);
+  const [tempMeaning, setTempMeaning] = useState<TempMeaningRecording | null>(null);
+  const [isMeaningRecording, setIsMeaningRecording] = useState(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
   const currentStimulus = orderedStimuli[currentTrialIndex];
-  const progressPercent = ((currentTrialIndex + (phase === 'done' ? 1 : 0)) / orderedStimuli.length) * 100;
+  const completedTrials = results.length;
+  const progressPercent = (completedTrials / orderedStimuli.length) * 100;
 
   async function requestMic() {
     try {
       setPermissionError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1. 第一次请求权限，主要是为了获取默认流，并解锁设备列表的 label (出于隐私，未授权前 label 是空的)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
       mediaStreamRef.current = stream;
       setStreamReady(true);
+
+      // 2. 获取所有媒体设备并过滤出麦克风
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(device => device.kind === 'audioinput');
+      setAudioDevices(audioInputs);
+
+      // 3. 默认选中当前使用的麦克风
+      if (audioInputs.length > 0) {
+        // 如果有 active 的 track，尝试获取它的 deviceId
+        const activeTrack = stream.getAudioTracks()[0];
+        const activeDeviceId = activeTrack?.getSettings().deviceId;
+        setSelectedDeviceId(activeDeviceId || audioInputs[0].deviceId);
+      }
+
     } catch (error) {
       console.error(error);
       setPermissionError('マイク権限の取得に失敗しました。ブラウザ設定を確認してください。');
+      setStreamReady(false);
+    }
+  }
+
+  // 切换麦克风的处理函数
+  async function switchMicrophone(newDeviceId: string) {
+    setSelectedDeviceId(newDeviceId);
+    try {
+      // 停止旧的音频流，释放硬件资源
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
+      // 使用指定的 deviceId 重新请求音频流
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: newDeviceId },
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+      mediaStreamRef.current = newStream;
+      setStreamReady(true);
+    } catch (error) {
+      console.error("マイクの切り替えに失敗しました:", error);
+      setPermissionError('選択したマイクの起動に失敗しました。');
       setStreamReady(false);
     }
   }
@@ -145,10 +225,11 @@ function App() {
       alert('Subject ID を入力してください。');
       return;
     }
-    if (!streamReady) {
+    if (!streamReady || !mediaStreamRef.current) {
       alert('先にマイク権限を許可してください。');
       return;
     }
+
     const chosen = pickBestAudioMimeType();
     setMeta({
       subjectId: subjectId.trim(),
@@ -157,40 +238,19 @@ function App() {
       stimulusOrder: orderedStimuli.map((s) => s.id),
       browser: getBrowserLabel(),
     });
-    setPhase('countdown');
+    setCurrentTrialIndex(0);
+    setResults([]);
+    setTempReading(null);
+    setTempMeaning(null);
     setCountdown(3);
+    setPhase('countdown');
   }
 
   useEffect(() => {
     if (phase !== 'countdown') return;
+
     if (countdown <= 0) {
-      const stimulus = orderedStimuli[currentTrialIndex];
-      const chosen = pickBestAudioMimeType();
-      chunksRef.current = [];
-
-      const stimOnsetMs = performance.now();
-      const recorder = chosen.mimeType
-        ? new MediaRecorder(mediaStreamRef.current as MediaStream, { mimeType: chosen.mimeType })
-        : new MediaRecorder(mediaStreamRef.current as MediaStream);
-
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.start();
-      setTempRecording({
-        trialIndex: currentTrialIndex + 1,
-        stimulus,
-        stimOnsetMs,
-        recordStartMs: stimOnsetMs,
-        audioMime: chosen.mimeType || recorder.mimeType || 'audio/webm',
-        audioExt: chosen.ext,
-        audioFile: `trial_${String(currentTrialIndex + 1).padStart(3, '0')}.${chosen.ext}`,
-      });
-      setPhase('recording');
+      beginReadingRecording();
       return;
     }
 
@@ -199,7 +259,7 @@ function App() {
     }, 1000);
 
     return () => window.clearTimeout(timer);
-  }, [phase, countdown, orderedStimuli, currentTrialIndex]);
+  }, [phase, countdown]);
 
   useEffect(() => {
     if (phase !== 'recording') return;
@@ -207,23 +267,81 @@ function App() {
     function onKeyDown(event: KeyboardEvent) {
       if (event.code !== 'Space') return;
       event.preventDefault();
-      stopCurrentRecording();
+      stopReadingRecording();
     }
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [phase, tempRecording]);
+  }, [phase, tempReading]);
 
-  function stopCurrentRecording() {
+  useEffect(() => {
+    if (phase !== 'meaningRecording') return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.code !== 'Space' || !isMeaningRecording) return;
+      event.preventDefault();
+      stopMeaningRecording();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [phase, isMeaningRecording, tempMeaning]);
+
+  function createRecorder() {
+    const stream = mediaStreamRef.current;
+    if (!stream) {
+      throw new Error('Microphone stream not ready');
+    }
+
+    const chosen = pickBestAudioMimeType();
+    const recorder = chosen.mimeType
+      ? new MediaRecorder(stream, { mimeType: chosen.mimeType })
+      : new MediaRecorder(stream);
+
+    return {
+      recorder,
+      mimeType: chosen.mimeType || recorder.mimeType || 'audio/webm',
+      ext: chosen.ext || 'webm',
+    };
+  }
+
+  function beginReadingRecording() {
+    const stimulus = orderedStimuli[currentTrialIndex];
+    chunksRef.current = [];
+
+    const { recorder, mimeType, ext } = createRecorder();
+    const stimOnsetMs = performance.now();
+
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.start(250);
+    setTempReading({
+      trialIndex: currentTrialIndex + 1,
+      stimulus,
+      stimOnsetMs,
+      recordStartMs: stimOnsetMs,
+      audioMime: mimeType,
+      audioExt: ext,
+      audioFile: `trial_${String(currentTrialIndex + 1).padStart(3, '0')}_reading.${ext}`,
+    });
+    setPhase('recording');
+  }
+
+  function stopReadingRecording() {
     const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state !== 'recording' || !tempRecording) return;
+    if (!recorder || recorder.state !== 'recording' || !tempReading) return;
 
     const stopMs = performance.now();
     recorder.onstop = () => {
       const blob = new Blob(chunksRef.current, {
-        type: tempRecording.audioMime || recorder.mimeType || 'audio/webm',
+        type: tempReading.audioMime || recorder.mimeType || 'audio/webm',
       });
-      setTempRecording((prev) => {
+      setTempReading((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -231,35 +349,99 @@ function App() {
           audioBlob: blob,
         };
       });
-      setPhase('survey');
+      setTempMeaning(null);
+      setIsMeaningRecording(false);
+      setPhase('meaningRecording');
     };
     recorder.stop();
   }
 
+  function startMeaningRecording() {
+    chunksRef.current = [];
+    const { recorder, mimeType, ext } = createRecorder();
+
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunksRef.current.push(event.data);
+      }
+    };
+
+    const startMs = performance.now();
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, {
+        type: mimeType || recorder.mimeType || 'audio/webm',
+      });
+      setTempMeaning((prev) => ({
+        ...prev,
+        startMs: prev?.startMs ?? startMs,
+        stopMs: prev?.stopMs,
+        audioBlob: blob,
+        audioMime: mimeType,
+        audioExt: ext,
+        audioFile: `trial_${String(currentTrialIndex + 1).padStart(3, '0')}_meaning.${ext}`,
+      }));
+      setIsMeaningRecording(false);
+      setPhase('survey');
+    };
+
+    setTempMeaning({
+      startMs,
+      audioMime: mimeType,
+      audioExt: ext,
+      audioFile: `trial_${String(currentTrialIndex + 1).padStart(3, '0')}_meaning.${ext}`,
+    });
+    setIsMeaningRecording(true);
+    recorder.start();
+  }
+
+  function stopMeaningRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== 'recording') return;
+
+    const stopMs = performance.now();
+    setTempMeaning((prev) => (prev ? { ...prev, stopMs } : prev));
+    recorder.stop();
+  }
+
   function submitSurvey(response: SurveyResponse) {
-    if (!tempRecording?.audioBlob || tempRecording.recordStopMs == null) {
-      alert('録音データが不完全です。');
+    if (!tempReading?.audioBlob || tempReading.recordStopMs == null) {
+      alert('読み上げ音声データが不完全です。');
+      return;
+    }
+
+    if (!tempMeaning?.audioBlob || tempMeaning.startMs == null || tempMeaning.stopMs == null) {
+      alert('Q1 の口述回答を録音してください。');
       return;
     }
 
     const result: TrialResult = {
-      trialIndex: tempRecording.trialIndex,
-      stimulusId: tempRecording.stimulus.id,
-      stimulusText: tempRecording.stimulus.text,
-      length: tempRecording.stimulus.text.length,
-      stimOnsetMs: tempRecording.stimOnsetMs,
-      recordStartMs: tempRecording.recordStartMs,
-      recordStopMs: tempRecording.recordStopMs,
-      rtKeyMs: tempRecording.recordStopMs - tempRecording.stimOnsetMs,
-      audioMime: tempRecording.audioMime || 'audio/webm',
-      audioExt: tempRecording.audioExt || 'webm',
-      audioFile: tempRecording.audioFile || `trial_${String(tempRecording.trialIndex).padStart(3, '0')}.webm`,
-      audioBlob: tempRecording.audioBlob,
+      trialIndex: tempReading.trialIndex,
+      stimulusId: tempReading.stimulus.id,
+      stimulusText: tempReading.stimulus.text,
+      length: tempReading.stimulus.text.length,
+      stimOnsetMs: tempReading.stimOnsetMs,
+      recordStartMs: tempReading.recordStartMs,
+      recordStopMs: tempReading.recordStopMs,
+      rtKeyMs: tempReading.recordStopMs - tempReading.stimOnsetMs,
+      audioMime: tempReading.audioMime || 'audio/webm',
+      audioExt: tempReading.audioExt || 'webm',
+      audioFile: tempReading.audioFile || `trial_${String(tempReading.trialIndex).padStart(3, '0')}_reading.webm`,
+      audioBlob: tempReading.audioBlob,
+      meaningRecordStartMs: tempMeaning.startMs,
+      meaningRecordStopMs: tempMeaning.stopMs,
+      meaningRtMs: tempMeaning.stopMs - tempMeaning.startMs,
+      meaningAudioMime: tempMeaning.audioMime || 'audio/webm',
+      meaningAudioExt: tempMeaning.audioExt || 'webm',
+      meaningAudioFile: tempMeaning.audioFile || `trial_${String(tempReading.trialIndex).padStart(3, '0')}_meaning.webm`,
+      meaningAudioBlob: tempMeaning.audioBlob,
       responses: response,
     };
 
     setResults((prev) => [...prev, result]);
-    setTempRecording(null);
+    setTempReading(null);
+    setTempMeaning(null);
+    setIsMeaningRecording(false);
 
     const isLast = currentTrialIndex >= orderedStimuli.length - 1;
     if (isLast) {
@@ -288,6 +470,12 @@ function App() {
         audioMime: r.audioMime,
         audioExt: r.audioExt,
         audioFile: r.audioFile,
+        meaningRecordStartMs: r.meaningRecordStartMs,
+        meaningRecordStopMs: r.meaningRecordStopMs,
+        meaningRtMs: r.meaningRtMs,
+        meaningAudioMime: r.meaningAudioMime,
+        meaningAudioExt: r.meaningAudioExt,
+        meaningAudioFile: r.meaningAudioFile,
         responses: r.responses,
       })),
     };
@@ -299,6 +487,7 @@ function App() {
   function exportAllAudio() {
     results.forEach((r) => {
       downloadBlob(r.audioBlob, r.audioFile);
+      downloadBlob(r.meaningAudioBlob, r.meaningAudioFile);
     });
   }
 
@@ -320,11 +509,9 @@ function App() {
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>Katakana Reading Experiment</Badge>
-                  <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                    実験の準備
-                  </h1>
+                  <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">実験の準備</h1>
                   <p className="max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                    被験者情報を入力し、マイク権限を許可してから実験を開始します。現在の MVP では、各 trial の録音と回答をローカルに保存できます。
+                    被験者情報を入力し、マイク権限を許可してから実験を開始します。各 trial では、読み上げ音声と意味の口述回答をそれぞれ保存します。
                   </p>
                 </div>
 
@@ -337,6 +524,24 @@ function App() {
                       onChange={(e) => setSubjectId(e.target.value)}
                       placeholder="例: S001"
                     />
+
+                    {/* 新增：麦克风选择下拉菜单 */}
+                    {audioDevices.length > 0 && (
+                      <div className="mt-5">
+                        <label className="mb-2 block text-sm font-medium text-slate-200">マイクを選択</label>
+                        <select
+                          className="w-full appearance-none rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
+                          value={selectedDeviceId}
+                          onChange={(e) => switchMicrophone(e.target.value)}
+                        >
+                          {audioDevices.map((device, index) => (
+                            <option key={device.deviceId || index} value={device.deviceId} className="bg-slate-900">
+                              {device.label || `Microphone ${index + 1}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="mt-5 flex flex-wrap gap-3">
                       <PrimaryButton onClick={startExperiment}>実験開始</PrimaryButton>
@@ -375,7 +580,7 @@ function App() {
                 <div className="space-y-2">
                   <h2 className="text-2xl font-semibold text-white">まもなく単語が表示されます</h2>
                   <p className="text-sm leading-7 text-slate-300">
-                    カウントダウン中はそのままお待ちください。表示後、単語を読み上げたら Space キーで次へ進みます。
+                    カウントダウン後に単語を読み上げてください。読み終わったら Space キーまたはボタンで次へ進みます。
                   </p>
                 </div>
               </div>
@@ -386,7 +591,7 @@ function App() {
             <CardShell className="max-w-4xl text-center">
               <div className="space-y-10">
                 <div className="space-y-3">
-                  <Badge>Recording</Badge>
+                  <Badge>Reading Recording</Badge>
                   <div className="text-sm text-slate-400">Trial {currentTrialIndex + 1} / {orderedStimuli.length}</div>
                 </div>
 
@@ -405,14 +610,47 @@ function App() {
                 </div>
 
                 <div className="flex justify-center">
-                  <PrimaryButton onClick={stopCurrentRecording}>次へ進む</PrimaryButton>
+                  <PrimaryButton onClick={stopReadingRecording}>次へ進む</PrimaryButton>
                 </div>
               </div>
             </CardShell>
           )}
 
-          {phase === 'survey' && tempRecording && (
-            <SurveyForm stimulus={tempRecording.stimulus.text} onSubmit={submitSurvey} />
+          {phase === 'meaningRecording' && (
+            <CardShell className="max-w-4xl">
+              <div className="space-y-8 text-center">
+                <div className="space-y-3">
+                  <Badge>Meaning Recording</Badge>
+                  <h2 className="text-3xl font-semibold tracking-tight text-white">Q1. 単語の意味を口頭で答えてください</h2>
+                  <p className="text-sm leading-7 text-slate-300">
+                    対象語: <span className="font-semibold text-white">{currentStimulus.text}</span>
+                  </p>
+                </div>
+
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <p className="text-sm leading-7 text-slate-300">
+                    わかる範囲で説明してください。録音を開始して話し終わったら、Space キーまたは終了ボタンを押してください。
+                  </p>
+
+                  <div className="mt-6 flex flex-wrap justify-center gap-3">
+                    <PrimaryButton onClick={startMeaningRecording} disabled={isMeaningRecording}>
+                      {isMeaningRecording ? '録音中...' : '口述回答を開始'}
+                    </PrimaryButton>
+                    <SecondaryButton onClick={stopMeaningRecording} disabled={!isMeaningRecording}>
+                      終了
+                    </SecondaryButton>
+                  </div>
+
+                  <div className="mt-4 text-sm text-slate-400">
+                    {tempMeaning?.audioBlob ? '口述回答が保存されました。' : isMeaningRecording ? '録音中です…' : 'まだ録音されていません。'}
+                  </div>
+                </div>
+              </div>
+            </CardShell>
+          )}
+
+          {phase === 'survey' && (
+            <SurveyForm stimulus={currentStimulus.text} onSubmit={submitSurvey} />
           )}
 
           {phase === 'done' && (
@@ -422,7 +660,7 @@ function App() {
                   <Badge>Completed</Badge>
                   <h2 className="text-3xl font-semibold tracking-tight text-white">実験完了</h2>
                   <p className="text-sm leading-7 text-slate-300">
-                    すべての trial が保存されました。MVP では JSON と音声を個別にダウンロードできます。
+                    すべての trial が保存されました。各 trial には読み上げ音声と意味口述音声の 2 本が含まれます。
                   </p>
                 </div>
 
@@ -451,7 +689,6 @@ function SurveyForm({
   stimulus: string;
   onSubmit: (response: SurveyResponse) => void;
 }) {
-  const [meaningText, setMeaningText] = useState('');
   const [familiarity, setFamiliarity] = useState<number | null>(null);
   const [confidence, setConfidence] = useState<number | null>(null);
   const [exposureFreq, setExposureFreq] = useState<number | null>(null);
@@ -464,7 +701,6 @@ function SurveyForm({
     }
 
     onSubmit({
-      meaningText,
       familiarity,
       confidence,
       exposureFreq,
@@ -482,16 +718,6 @@ function SurveyForm({
             対象語: <span className="font-semibold text-white">{stimulus}</span>
           </p>
         </div>
-
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
-          <label className="mb-3 block text-sm font-medium text-slate-200">Q1. 単語の意味は？</label>
-          <textarea
-            className="min-h-32 w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-base text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400 focus:ring-2 focus:ring-sky-400/30"
-            value={meaningText}
-            onChange={(e) => setMeaningText(e.target.value)}
-            placeholder="自由記述（わからない場合は空欄でも可）"
-          />
-        </section>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <LikertQuestion label="Q2. なじみ度" value={familiarity} onChange={setFamiliarity} />
@@ -533,7 +759,7 @@ function TopBar({
           </div>
           <div className="flex items-center gap-2">
             <MiniPill label="Phase" value={phase} />
-            <MiniPill label="Trial" value={`${Math.min(currentTrialIndex + (phase === 'done' ? 1 : 0), totalTrials)}/${totalTrials}`} />
+            <MiniPill label="Trial" value={`${Math.min(currentTrialIndex + 1, totalTrials)}/${totalTrials}`} />
           </div>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -557,22 +783,46 @@ function CardShell({ children, className = '' }: { children: React.ReactNode; cl
   );
 }
 
-function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function PrimaryButton({
+  children,
+  onClick,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-medium text-slate-900 transition hover:-translate-y-0.5 hover:bg-slate-100 active:translate-y-0"
+      disabled={disabled}
+      className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium transition ${disabled
+        ? 'cursor-not-allowed bg-slate-500/30 text-slate-400'
+        : 'bg-white text-slate-900 hover:-translate-y-0.5 hover:bg-slate-100 active:translate-y-0'
+        }`}
     >
       {children}
     </button>
   );
 }
 
-function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function SecondaryButton({
+  children,
+  onClick,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/10 active:translate-y-0"
+      disabled={disabled}
+      className={`inline-flex items-center justify-center rounded-2xl border px-5 py-3 text-sm font-medium transition ${disabled
+        ? 'cursor-not-allowed border-white/10 bg-white/5 text-slate-500'
+        : 'border-white/15 bg-white/5 text-white hover:-translate-y-0.5 hover:bg-white/10 active:translate-y-0'
+        }`}
     >
       {children}
     </button>
