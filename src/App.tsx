@@ -718,7 +718,7 @@ function App() {
                 </div>
 
                 <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-xl shadow-slate-200/50">
-                  <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" />
+                  {/* <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" /> */}
                   <div className="break-words text-4xl font-semibold tracking-[0.08em] text-slate-900 sm:text-6xl">
                     {currentStimulus.text}
                   </div>
@@ -743,7 +743,7 @@ function App() {
               <div className="space-y-8 text-center">
                 <div className="space-y-3">
                   <Badge>Meaning Recording</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">Q1. 単語の意味を口頭で答えてください</h2>
+                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">単語の意味を口頭で答えてください</h2>
                   <p className="text-sm leading-7 text-slate-600">
                     対象語: <span className="font-semibold text-slate-900">{currentStimulus.text}</span>
                   </p>
@@ -872,10 +872,10 @@ function SurveyForm({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <LikertQuestion label="Q2. なじみ度" value={familiarity} onChange={setFamiliarity} />
-          <LikertQuestion label="Q3. 意味理解自信度" value={confidence} onChange={setConfidence} />
-          <LikertQuestion label="Q4. 普段の見聞き頻度" value={exposureFreq} onChange={setExposureFreq} />
-          <LikertQuestion label="Q5. 自分で使う頻度" value={useFreq} onChange={setUseFreq} />
+          <LikertQuestion label="Q1. なじみ度" value={familiarity} onChange={setFamiliarity} />
+          <LikertQuestion label="Q2. 意味理解自信度" value={confidence} onChange={setConfidence} />
+          <LikertQuestion label="Q3. 普段の見聞き頻度" value={exposureFreq} onChange={setExposureFreq} />
+          <LikertQuestion label="Q4. 自分で使う頻度" value={useFreq} onChange={setUseFreq} />
         </div>
 
         <div className="flex justify-end">
