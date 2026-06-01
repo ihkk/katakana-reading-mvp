@@ -86,17 +86,42 @@ type TempMeaningRecording = {
   audioFile?: string;
 };
 
-// 练习用词汇（简单、常见，确保被试能顺利完成流程）
+// practice stimuli
 const PRACTICE_STIMULI: StimulusItem[] = [
-  { id: 'p001', text: 'テスト' },
-  { id: 'p002', text: 'サンプル' },
+  { id: 'p001', text: 'パソコン' },
+  { id: 'p002', text: 'てれび' },
 ];
 
-// 正式实验词汇
+// formal stimuli
 const MAIN_STIMULI: StimulusItem[] = [
-  { id: 'w001', text: 'ナショナリズム' },
-  // { id: 'w002', text: 'コミュニティ' },
-  // { id: 'w003', text: 'モチベーション' },
+  { id: 'w001', text: 'エラー' },
+  { id: 'w002', text: 'きんぐ' },
+  { id: 'w003', text: 'フロア' },
+  { id: 'w004', text: 'ぱすた' },
+  { id: 'w005', text: 'シナリオ' },
+  { id: 'w006', text: 'どらごん' },
+  { id: 'w007', text: 'ダメージ' },
+  { id: 'w008', text: 'ろーかる' },
+  { id: 'w009', text: 'ポジション' },
+  { id: 'w010', text: 'かめらまん' },
+  { id: 'w011', text: 'ストリート' },
+  { id: 'w012', text: 'こんぱくと' },
+  { id: 'w013', text: 'ステーション' },
+  { id: 'w014', text: 'ぷらいばしー' },
+  { id: 'w015', text: 'パンフレット' },
+  { id: 'w016', text: 'へりこぷたー' },
+  { id: 'w017', text: 'ジャーナリスト' },
+  { id: 'w018', text: 'いんふるえんざ' },
+  { id: 'w019', text: 'マーケティング' },
+  { id: 'w020', text: 'はーどでぃすく' },
+  { id: 'w021', text: 'シミュレーション' },
+  { id: 'w022', text: 'どきゅめんたりー' },
+  { id: 'w023', text: 'ファンデーション' },
+  { id: 'w024', text: 'しちゅえーしょん' },
+  { id: 'w025', text: 'アイデンティティー' },
+  { id: 'w026', text: 'いんふぉめーしょん' },
+  { id: 'w027', text: 'プレゼンテーション' },
+  { id: 'w028', text: 'すーぱーまーけっと' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -591,7 +616,8 @@ function App() {
             <CardShell className="max-w-3xl">
               <div className="space-y-8">
                 <div className="space-y-3">
-                  <Badge>Katakana Reading Experiment</Badge>
+                  <Badge>単語読み上げ予備実験
+                  </Badge>
                   <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">実験の準備</h1>
                   <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
                     被験者情報を入力し、マイク権限を許可してから実験を開始します。
@@ -658,7 +684,7 @@ function App() {
                   <Badge>Instructions</Badge>
                   <h2 className="text-3xl font-semibold tracking-tight text-slate-900">実験の進め方</h2>
                   <p className="text-sm leading-7 text-slate-600">
-                    本実験では、画面に表示される「カタカナ語」を声に出して読み、その後その言葉の意味を説明していただきます。
+                    本実験では、画面に表示される単語を声に出して読み、その後その言葉の意味を説明していただきます。
                   </p>
                 </div>
 
@@ -666,7 +692,7 @@ function App() {
                   <InstructionStep
                     number="1"
                     title="単語の読み上げ"
-                    desc="カウントダウン後、画面にカタカナ語が表示されます。できるだけ自然な速度で声に出して読んでください。読み終わったら、すぐに Space キーを押してください。"
+                    desc="カウントダウン後、画面に単語が表示されます。できるだけ自然な速度で声に出して読んでください。読み終わったら、すぐに Space キーを押してください。"
                   />
                   <InstructionStep
                     number="2"
@@ -854,7 +880,7 @@ function SurveyForm({
 
   function submit() {
     if (familiarity == null || confidence == null || exposureFreq == null || useFreq == null) {
-      alert('Q2〜Q5 をすべて選択してください。');
+      alert('Q1〜Q4 をすべて選択してください。');
       return;
     }
     onSubmit({ familiarity, confidence, exposureFreq, useFreq });
