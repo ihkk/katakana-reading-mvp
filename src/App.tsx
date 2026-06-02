@@ -174,6 +174,42 @@ function likertOptions() {
   return [1, 2, 3, 4, 5];
 }
 
+function getStimulusTextSizeClass(text: string) {
+  const length = text.length;
+
+  if (length <= 4) return 'text-6xl sm:text-8xl lg:text-9xl';
+  if (length <= 7) return 'text-5xl sm:text-7xl lg:text-8xl';
+  if (length <= 10) return 'text-4xl sm:text-6xl lg:text-7xl';
+  return 'text-3xl sm:text-5xl lg:text-6xl';
+}
+
+const INSTRUCTION_PAGES = [
+  {
+    badge: 'Step 1',
+    title: '単語を声に出して読みます',
+    body: 'カウントダウンのあと、画面中央に単語が大きく表示されます。表示された単語を、できるだけ自然な速度で声に出して読んでください。',
+    note: '読み終わったら、すぐに Space キー、または画面のボタンを押してください。',
+  },
+  {
+    badge: 'Step 2',
+    title: '単語の意味を口頭で説明します',
+    body: '読み上げが終わると、同じ単語について意味を説明する画面に進みます。録音開始ボタンを押して、知っている範囲で説明してください。',
+    note: '説明が終わったら Space キー、または終了ボタンを押してください。',
+  },
+  {
+    badge: 'Step 3',
+    title: '4つの質問に回答します',
+    body: '各単語について、なじみ度、意味理解の自信度、普段の見聞き頻度、自分で使う頻度を1から5で回答します。',
+    note: 'すべて選ぶと、次の単語へ進めます。',
+  },
+  {
+    badge: 'Practice',
+    title: 'まずは練習から始めます',
+    body: `操作に慣れるため、最初に${PRACTICE_STIMULI.length}回の練習試次があります。練習が終わると、本番（全${MAIN_STIMULI.length}試次）に進みます。`,
+    note: '準備ができたら、練習を開始してください。',
+  },
+];
+
 function App() {
   const orderedMainStimuli = useMemo(() => shuffle(MAIN_STIMULI), []);
   const orderedPracticeStimuli = useMemo(() => PRACTICE_STIMULI, []); // 练习通常不打乱
@@ -181,6 +217,7 @@ function App() {
   const [phase, setPhase] = useState<Phase>('setup');
   const [mode, setMode] = useState<ExperimentMode>('practice');
   const [subjectId, setSubjectId] = useState('');
+  const [instructionPageIndex, setInstructionPageIndex] = useState(0);
 
   const [streamReady, setStreamReady] = useState(false);
   const [permissionError, setPermissionError] = useState('');
@@ -281,6 +318,7 @@ function App() {
     });
 
     // 进入说明环节
+    setInstructionPageIndex(0);
     setPhase('instructions');
   }
 
@@ -300,47 +338,6 @@ function App() {
     setPhase('countdown');
   }
 
-  useEffect(() => {
-    if (phase !== 'countdown') return;
-
-    if (countdown <= 0) {
-      beginReadingRecording_V2();
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
-
-    return () => window.clearTimeout(timer);
-  }, [phase, countdown]);
-
-  useEffect(() => {
-    if (phase !== 'recording') return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.code !== 'Space') return;
-      event.preventDefault();
-      stopReadingRecording_V2();
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [phase, tempReading]);
-
-  useEffect(() => {
-    if (phase !== 'meaningRecording') return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.code !== 'Space' || !isMeaningRecording) return;
-      event.preventDefault();
-      stopMeaningRecording_V2();
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [phase, isMeaningRecording, tempMeaning]);
-
   function createRecorder() {
     const stream = mediaStreamRef.current;
     if (!stream) {
@@ -359,57 +356,6 @@ function App() {
     };
   }
 
-  function beginReadingRecording() {
-    const stimulus = activeStimuli[currentTrialIndex];
-    const localChunks: Blob[] = [];
-
-    const { recorder, mimeType, ext } = createRecorder();
-    const stimOnsetMs = performance.now();
-
-    mediaRecorderRef.current = recorder;
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        localChunks.push(event.data);
-      }
-    };
-
-    const prefix = mode === 'practice' ? 'practice' : 'trial';
-    const filename = `${prefix}_${String(currentTrialIndex + 1).padStart(3, '0')}_reading.${ext}`;
-
-    recorder.start(250);
-    setTempReading({
-      trialIndex: currentTrialIndex + 1,
-      stimulus,
-      stimOnsetMs,
-      recordStartMs: stimOnsetMs,
-      audioMime: mimeType,
-      audioExt: ext,
-      audioFile: filename,
-    });
-    setPhase('recording');
-  }
-
-  function stopReadingRecording() {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state !== 'recording' || !tempReading) return;
-
-    const stopMs = performance.now();
-    recorder.onstop = () => {
-      // 在闭包内部收集数据，避免并发覆盖
-      const currentChunks = [];
-      const blob = new Blob(currentChunks, { // 这里简化了获取，实际上应该用 localChunks，为了避免重构过深，我们依赖之前的状态
-        type: tempReading.audioMime || recorder.mimeType || 'audio/webm',
-      });
-      // 这里的正确做法是把 localChunks 通过参数或状态传递。为了简洁，我们这里假设 chunksRef 的逻辑已在前面修复为局部变量或在 ondataavailable 处理。
-    };
-
-    // 修复局部 chunks 的完整实现
-    recorder.onstop = () => { /* 将在下方修复函数中整体给出 */ };
-    recorder.stop();
-  }
-
-  // -------------------------------------------------------------
-  // 修改后的 begin/stop 配合局部 chunks (最佳实践)
   const readingChunksRef = useRef<Blob[]>([]);
   const meaningChunksRef = useRef<Blob[]>([]);
 
@@ -495,7 +441,47 @@ function App() {
     if (!recorder || recorder.state !== 'recording') return;
     recorder.stop();
   }
-  // -------------------------------------------------------------
+
+  useEffect(() => {
+    if (phase !== 'countdown') return;
+
+    const timer = window.setTimeout(() => {
+      if (countdown <= 1) {
+        beginReadingRecording_V2();
+        return;
+      }
+
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [phase, countdown, beginReadingRecording_V2]);
+
+  useEffect(() => {
+    if (phase !== 'recording') return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      stopReadingRecording_V2();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [phase, tempReading]);
+
+  useEffect(() => {
+    if (phase !== 'meaningRecording') return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.code !== 'Space' || !isMeaningRecording) return;
+      event.preventDefault();
+      stopMeaningRecording_V2();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [phase, isMeaningRecording, tempMeaning]);
 
   function submitSurvey(response: SurveyResponse) {
     if (!tempReading?.audioBlob || tempReading.recordStopMs == null) {
@@ -593,10 +579,13 @@ function App() {
     });
   }
 
+  const instructionPage = INSTRUCTION_PAGES[instructionPageIndex];
+  const isLastInstructionPage = instructionPageIndex === INSTRUCTION_PAGES.length - 1;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300">
       <BackgroundGlow />
-      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
 
         {/* TopBar 只有在非 setup 且非说明页面显示 */}
         {phase !== 'setup' && phase !== 'instructions' && phase !== 'intermission' && (
@@ -610,25 +599,25 @@ function App() {
           />
         )}
 
-        <main className="flex flex-1 items-center justify-center py-6">
+        <main className="flex flex-1 items-center justify-center py-4 sm:py-6">
 
           {phase === 'setup' && (
-            <CardShell className="max-w-3xl">
+            <CardShell className="max-w-4xl">
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>単語読み上げ予備実験
                   </Badge>
-                  <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">実験の準備</h1>
-                  <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+                  <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験の準備</h1>
+                  <p className="max-w-3xl text-lg leading-8 text-slate-600">
                     被験者情報を入力し、マイク権限を許可してから実験を開始します。
                   </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-[1.2fr_0.8fr]">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <label className="mb-2 block text-sm font-medium text-slate-700">Subject ID</label>
+                    <label className="mb-2 block text-lg font-medium text-slate-700">Subject ID</label>
                     <input
-                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                       value={subjectId}
                       onChange={(e) => setSubjectId(e.target.value)}
                       placeholder="例: S001"
@@ -636,9 +625,9 @@ function App() {
 
                     {audioDevices.length > 0 && (
                       <div className="mt-5">
-                        <label className="mb-2 block text-sm font-medium text-slate-700">マイクを選択</label>
+                        <label className="mb-2 block text-lg font-medium text-slate-700">マイクを選択</label>
                         <select
-                          className="w-full appearance-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                          className="w-full appearance-none rounded-2xl border border-slate-300 bg-white px-5 py-4 text-lg text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                           value={selectedDeviceId}
                           onChange={(e) => switchMicrophone(e.target.value)}
                         >
@@ -652,21 +641,21 @@ function App() {
                     )}
 
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <PrimaryButton onClick={startExperiment}>次へ（説明を読む）</PrimaryButton>
+                      <PrimaryButton onClick={startExperiment}>説明へ進む</PrimaryButton>
                       <SecondaryButton onClick={requestMic}>マイク権限を許可</SecondaryButton>
                     </div>
                   </div>
 
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="space-y-4 text-sm">
+                    <div className="space-y-4 text-base">
                       <StatusRow label="マイク状態" value={streamReady ? '準備完了' : '未許可'} success={streamReady} />
                       <StatusRow label="録音形式" value={pickBestAudioMimeType().mimeType || 'browser default'} />
                       {permissionError ? (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-lg leading-8 text-rose-700">
                           {permissionError}
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-lg leading-8 text-emerald-700">
                           実験前にブラウザのマイク権限が有効か確認してください。
                         </div>
                       )}
@@ -678,56 +667,72 @@ function App() {
           )}
 
           {phase === 'instructions' && (
-            <CardShell className="max-w-3xl">
-              <div className="space-y-8">
-                <div className="space-y-3">
+            <CardShell className="max-w-4xl">
+              <div className="space-y-10">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <Badge>Instructions</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">実験の進め方</h2>
-                  <p className="text-sm leading-7 text-slate-600">
-                    本実験では、画面に表示される単語を声に出して読み、その後その言葉の意味を説明していただきます。
-                  </p>
+                  <div className="text-lg font-semibold text-slate-500">
+                    {instructionPageIndex + 1} / {INSTRUCTION_PAGES.length}
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <InstructionStep
-                    number="1"
-                    title="単語の読み上げ"
-                    desc="カウントダウン後、画面に単語が表示されます。できるだけ自然な速度で声に出して読んでください。読み終わったら、すぐに Space キーを押してください。"
-                  />
-                  <InstructionStep
-                    number="2"
-                    title="意味の口述"
-                    desc="次に、その単語の意味を口頭で説明していただきます。「録音開始」ボタンを押し、知っている範囲で説明してください。話し終わったら終了ボタンを押します。"
-                  />
-                  <InstructionStep
-                    number="3"
-                    title="アンケート回答"
-                    desc="最後に、その単語に対する「なじみ度」などを5段階で評価し、次の単語へ進みます。"
-                  />
+                <div className="min-h-[360px] space-y-8 rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
+                  <div className="inline-flex rounded-full bg-sky-50 px-4 py-2 text-lg font-semibold text-sky-700">
+                    {instructionPage.badge}
+                  </div>
+                  <div className="space-y-5">
+                    <h2 className="text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+                      {instructionPage.title}
+                    </h2>
+                    <p className="text-2xl leading-10 text-slate-700">
+                      {instructionPage.body}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-xl leading-9 text-sky-800">
+                    {instructionPage.note}
+                  </div>
                 </div>
 
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm text-sky-800">
-                  <p className="font-semibold mb-1">まずは練習から始めましょう</p>
-                  <p>操作に慣れていただくため、{PRACTICE_STIMULI.length}回の練習試次を用意しています。準備ができたら下のボタンを押してください。</p>
+                <div className="grid grid-cols-4 gap-3" aria-label="説明ページの進捗">
+                  {INSTRUCTION_PAGES.map((page, index) => (
+                    <div
+                      key={page.badge}
+                      className={`h-3 rounded-full transition ${index <= instructionPageIndex ? 'bg-sky-500' : 'bg-slate-200'}`}
+                    />
+                  ))}
                 </div>
 
-                <div className="flex justify-end">
-                  <PrimaryButton onClick={beginPractice}>練習を開始する</PrimaryButton>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                  <SecondaryButton
+                    onClick={() => setInstructionPageIndex((prev) => Math.max(prev - 1, 0))}
+                    disabled={instructionPageIndex === 0}
+                  >
+                    戻る
+                  </SecondaryButton>
+                  {isLastInstructionPage ? (
+                    <PrimaryButton onClick={beginPractice}>練習を開始する</PrimaryButton>
+                  ) : (
+                    <PrimaryButton
+                      onClick={() => setInstructionPageIndex((prev) => Math.min(prev + 1, INSTRUCTION_PAGES.length - 1))}
+                    >
+                      次へ
+                    </PrimaryButton>
+                  )}
                 </div>
               </div>
             </CardShell>
           )}
 
           {phase === 'countdown' && (
-            <CardShell className="max-w-2xl text-center">
-              <div className="space-y-8">
+            <CardShell className="max-w-3xl text-center">
+              <div className="space-y-10">
                 <Badge>{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
-                <div className="mx-auto flex h-52 w-52 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-8xl font-semibold text-sky-600 shadow-xl shadow-sky-100">
+                <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-9xl font-semibold text-sky-600 shadow-xl shadow-sky-100 sm:h-72 sm:w-72">
                   {countdown}
                 </div>
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
-                  <p className="text-sm leading-7 text-slate-600">
+                <div className="space-y-3">
+                  <h2 className="text-4xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
+                  <p className="text-xl leading-9 text-slate-600">
                     表示されたら読み上げ、読み終わったら Space キーを押してください。
                   </p>
                 </div>
@@ -736,24 +741,24 @@ function App() {
           )}
 
           {phase === 'recording' && (
-            <CardShell className="max-w-4xl text-center">
-              <div className="space-y-10">
+            <CardShell className="max-w-5xl text-center">
+              <div className="space-y-12">
                 <div className="space-y-3">
                   <Badge>Reading Recording</Badge>
-                  <div className="text-sm text-slate-500">{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</div>
+                  <div className="text-lg text-slate-500">{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</div>
                 </div>
 
-                <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-xl shadow-slate-200/50">
+                <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-14 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-16">
                   {/* <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" /> */}
-                  <div className="break-words text-4xl font-semibold tracking-[0.08em] text-slate-900 sm:text-6xl">
+                  <div className={`whitespace-nowrap font-semibold leading-none text-slate-900 ${getStimulusTextSizeClass(currentStimulus.text)}`}>
                     {currentStimulus.text}
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-xl font-medium text-slate-900">読み上げてください</p>
-                  <p className="text-sm leading-7 text-slate-600">
-                    読み終わったら <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700 border border-slate-200">Space</span> キー、または下のボタンを押してください。
+                  <p className="text-3xl font-medium text-slate-900">読み上げてください</p>
+                  <p className="text-xl leading-9 text-slate-600">
+                    読み終わったら <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-slate-700 border border-slate-200">Space</span> キー、または下のボタンを押してください。
                   </p>
                 </div>
 
@@ -769,14 +774,14 @@ function App() {
               <div className="space-y-8 text-center">
                 <div className="space-y-3">
                   <Badge>Meaning Recording</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">単語の意味を口頭で答えてください</h2>
-                  <p className="text-sm leading-7 text-slate-600">
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">単語の意味を口頭で答えてください</h2>
+                  <p className="text-xl leading-9 text-slate-600">
                     対象語: <span className="font-semibold text-slate-900">{currentStimulus.text}</span>
                   </p>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <p className="text-sm leading-7 text-slate-600">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                  <p className="text-2xl leading-10 text-slate-700">
                     わかる範囲で説明してください。録音を開始して話し終わったら、Space キーまたは終了ボタンを押してください。
                   </p>
 
@@ -789,7 +794,7 @@ function App() {
                     </SecondaryButton>
                   </div>
 
-                  <div className="mt-4 text-sm text-slate-500">
+                  <div className="mt-5 text-lg text-slate-500">
                     {tempMeaning?.audioBlob ? '口述回答が保存されました。' : isMeaningRecording ? '録音中です…' : 'まだ録音されていません。'}
                   </div>
                 </div>
@@ -802,14 +807,14 @@ function App() {
           )}
 
           {phase === 'intermission' && (
-            <CardShell className="max-w-2xl text-center">
+            <CardShell className="max-w-3xl text-center">
               <div className="space-y-8">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">
                   🎉
                 </div>
                 <div className="space-y-3">
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">練習が完了しました</h2>
-                  <p className="text-sm leading-7 text-slate-600">
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">練習が完了しました</h2>
+                  <p className="text-xl leading-9 text-slate-600">
                     実験の流れは掴めましたでしょうか？<br />
                     ここから本番（全 {MAIN_STIMULI.length} 試次）が始まります。準備ができたら開始ボタンを押してください。
                   </p>
@@ -826,8 +831,8 @@ function App() {
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>Completed</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900">実験完了</h2>
-                  <p className="text-sm leading-7 text-slate-600">
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験完了</h2>
+                  <p className="text-xl leading-9 text-slate-600">
                     すべての trial が保存されました。ご協力ありがとうございました。
                   </p>
                 </div>
@@ -851,20 +856,6 @@ function App() {
 }
 
 // ---- Sub Components ----
-
-function InstructionStep({ number, title, desc }: { number: string; title: string; desc: string }) {
-  return (
-    <div className="flex gap-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
-        {number}
-      </div>
-      <div>
-        <h3 className="mb-1 font-semibold text-slate-900">{title}</h3>
-        <p className="text-sm text-slate-600 leading-relaxed">{desc}</p>
-      </div>
-    </div>
-  );
-}
 
 function SurveyForm({
   stimulus,
@@ -891,8 +882,8 @@ function SurveyForm({
       <div className="space-y-8">
         <div className="space-y-3">
           <Badge>Post-trial Survey</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-900">事後質問</h2>
-          <p className="text-sm leading-7 text-slate-600">
+          <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">事後質問</h2>
+          <p className="text-xl leading-9 text-slate-600">
             対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
           </p>
         </div>
@@ -961,7 +952,7 @@ function TopBar({
 function CardShell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <section
-      className={`w-full rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-xl shadow-slate-200/50 backdrop-blur-xl sm:p-8 ${className}`}
+      className={`w-full rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-xl shadow-slate-200/50 backdrop-blur-xl sm:p-9 ${className}`}
     >
       {children}
     </section>
@@ -973,7 +964,7 @@ function PrimaryButton({ children, onClick, disabled = false }: { children: Reac
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-medium transition ${disabled
+      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl px-6 py-4 text-lg font-medium transition ${disabled
         ? 'cursor-not-allowed bg-slate-100 text-slate-400'
         : 'bg-slate-900 text-white shadow-md hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-lg active:translate-y-0'
         }`}
@@ -988,7 +979,7 @@ function SecondaryButton({ children, onClick, disabled = false }: { children: Re
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-2xl border px-5 py-3 text-sm font-medium transition ${disabled
+      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl border px-6 py-4 text-lg font-medium transition ${disabled
         ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
         : 'border-slate-300 bg-white text-slate-700 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-sm active:translate-y-0'
         }`}
@@ -1000,7 +991,7 @@ function SecondaryButton({ children, onClick, disabled = false }: { children: Re
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <div className="inline-flex w-fit items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+    <div className="inline-flex w-fit items-center rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
       {children}
     </div>
   );
@@ -1008,7 +999,7 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 function MiniPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
       <span className="text-slate-500">{label}</span>
       <span className="ml-2 font-semibold text-slate-800">{value}</span>
     </div>
@@ -1018,8 +1009,8 @@ function MiniPill({ label, value }: { label: string; value: string }) {
 function StatusRow({ label, value, success = false }: { label: string; value: string; success?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-      <span className="text-slate-500">{label}</span>
-      <span className={`font-semibold ${success ? 'text-emerald-600' : 'text-slate-900'}`}>{value}</span>
+      <span className="shrink-0 text-slate-500">{label}</span>
+      <span className={`break-all text-right font-semibold ${success ? 'text-emerald-600' : 'text-slate-900'}`}>{value}</span>
     </div>
   );
 }
@@ -1027,8 +1018,8 @@ function StatusRow({ label, value, success = false }: { label: string; value: st
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+      <div className="text-lg font-medium text-slate-500">{label}</div>
+      <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
     </div>
   );
 }
@@ -1036,13 +1027,13 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 function LikertQuestion({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number) => void }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 text-sm font-semibold text-slate-800">{label}</div>
+      <div className="mb-4 text-xl font-semibold text-slate-800">{label}</div>
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {likertOptions().map((n) => (
           <button
             key={n}
             onClick={() => onChange(n)}
-            className={`rounded-2xl border px-0 py-3 text-sm font-medium transition ${value === n
+            className={`min-h-16 rounded-2xl border px-0 py-3 text-2xl font-semibold transition ${value === n
               ? 'border-sky-500 bg-sky-500 text-white shadow-md shadow-sky-200'
               : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
@@ -1051,7 +1042,7 @@ function LikertQuestion({ label, value, onChange }: { label: string; value: numb
           </button>
         ))}
       </div>
-      <div className="mt-3 flex justify-between text-xs font-medium text-slate-400">
+      <div className="mt-3 flex justify-between text-base font-medium text-slate-400">
         <span>低い</span>
         <span>高い</span>
       </div>
