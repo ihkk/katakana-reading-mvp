@@ -287,6 +287,9 @@ function App() {
   async function requestMic() {
     try {
       setPermissionError('');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('MediaDevices API is not available');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -312,6 +315,10 @@ function App() {
       setStreamReady(false);
     }
   }
+
+  useEffect(() => {
+    requestMic();
+  }, []);
 
   async function switchMicrophone(newDeviceId: string) {
     setSelectedDeviceId(newDeviceId);
@@ -342,7 +349,7 @@ function App() {
       return;
     }
     if (!streamReady || !mediaStreamRef.current) {
-      alert('先にマイク権限を許可してください。');
+      alert('マイク状態を確認してください。必要に応じて再確認ボタンを押してください。');
       return;
     }
 
@@ -648,7 +655,7 @@ function App() {
                   </Badge>
                   <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験の準備</h1>
                   <p className="max-w-6xl text-lg leading-8 text-slate-600">
-                    被験者情報を入力し、マイク権限を許可してから実験を開始します。
+                    被験者情報を入力します。マイク権限は自動で確認されます。
                   </p>
                 </div>
 
@@ -681,7 +688,7 @@ function App() {
 
                     <div className="mt-5 flex flex-wrap gap-3">
                       <PrimaryButton onClick={startExperiment}>説明へ進む</PrimaryButton>
-                      <SecondaryButton onClick={requestMic}>マイク権限を許可</SecondaryButton>
+                      <SecondaryButton onClick={requestMic}>マイク権限を再確認</SecondaryButton>
                     </div>
                   </div>
 
@@ -695,7 +702,7 @@ function App() {
                         </div>
                       ) : (
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-lg leading-8 text-emerald-700">
-                          実験前にブラウザのマイク権限が有効か確認してください。
+                          ページを開くと、ブラウザがマイク権限を確認します。
                         </div>
                       )}
                     </div>
