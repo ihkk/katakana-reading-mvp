@@ -18,6 +18,7 @@ type Phase =
   | 'done';
 
 type ExperimentMode = 'practice' | 'main';
+type StimulusScript = 'hiragana' | 'katakana' | 'mixed' | 'unknown';
 
 type StimulusItem = {
   id: string;
@@ -36,6 +37,7 @@ type TrialResult = {
   trialIndex: number;
   stimulusId: string;
   stimulusText: string;
+  stimulusScript: StimulusScript;
   length: number;
   stimOnsetMs: number;
   recordStartMs: number;
@@ -101,32 +103,32 @@ const PRACTICE_STIMULI: StimulusItem[] = [
 const MAIN_STIMULI: StimulusItem[] = [
   { id: 'w001', text: 'エラー' },
   { id: 'w002', text: 'きんぐ' },
-  // { id: 'w003', text: 'フロア' },
-  // { id: 'w004', text: 'ぱすた' },
-  // { id: 'w005', text: 'シナリオ' },
-  // { id: 'w006', text: 'どらごん' },
-  // { id: 'w007', text: 'ダメージ' },
-  // { id: 'w008', text: 'ろーかる' },
-  // { id: 'w009', text: 'ポジション' },
-  // { id: 'w010', text: 'かめらまん' },
-  // { id: 'w011', text: 'ストリート' },
-  // { id: 'w012', text: 'こんぱくと' },
-  // { id: 'w013', text: 'ステーション' },
-  // { id: 'w014', text: 'ぷらいばしー' },
-  // { id: 'w015', text: 'パンフレット' },
-  // { id: 'w016', text: 'へりこぷたー' },
-  // { id: 'w017', text: 'ジャーナリスト' },
-  // { id: 'w018', text: 'いんふるえんざ' },
-  // { id: 'w019', text: 'マーケティング' },
-  // { id: 'w020', text: 'はーどでぃすく' },
-  // { id: 'w021', text: 'シミュレーション' },
-  // { id: 'w022', text: 'どきゅめんたりー' },
-  // { id: 'w023', text: 'ファンデーション' },
-  // { id: 'w024', text: 'しちゅえーしょん' },
-  // { id: 'w025', text: 'アイデンティティー' },
-  // { id: 'w026', text: 'いんふぉめーしょん' },
-  // { id: 'w027', text: 'プレゼンテーション' },
-  // { id: 'w028', text: 'すーぱーまーけっと' },
+  { id: 'w003', text: 'フロア' },
+  { id: 'w004', text: 'ぱすた' },
+  { id: 'w005', text: 'シナリオ' },
+  { id: 'w006', text: 'どらごん' },
+  { id: 'w007', text: 'ダメージ' },
+  { id: 'w008', text: 'ろーかる' },
+  { id: 'w009', text: 'ポジション' },
+  { id: 'w010', text: 'かめらまん' },
+  { id: 'w011', text: 'ストリート' },
+  { id: 'w012', text: 'こんぱくと' },
+  { id: 'w013', text: 'ステーション' },
+  { id: 'w014', text: 'ぷらいばしー' },
+  { id: 'w015', text: 'パンフレット' },
+  { id: 'w016', text: 'へりこぷたー' },
+  { id: 'w017', text: 'ジャーナリスト' },
+  { id: 'w018', text: 'いんふるえんざ' },
+  { id: 'w019', text: 'マーケティング' },
+  { id: 'w020', text: 'はーどでぃすく' },
+  { id: 'w021', text: 'シミュレーション' },
+  { id: 'w022', text: 'どきゅめんたりー' },
+  { id: 'w023', text: 'ファンデーション' },
+  { id: 'w024', text: 'しちゅえーしょん' },
+  { id: 'w025', text: 'アイデンティティー' },
+  { id: 'w026', text: 'いんふぉめーしょん' },
+  { id: 'w027', text: 'プレゼンテーション' },
+  { id: 'w028', text: 'すーぱーまーけっと' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -141,6 +143,16 @@ function shuffle<T>(arr: T[]): T[] {
 function getBrowserLabel(): string {
   if (typeof navigator === 'undefined') return 'unknown';
   return navigator.userAgent;
+}
+
+function getStimulusScript(text: string): StimulusScript {
+  const hasHiragana = /[\u3041-\u3096]/.test(text);
+  const hasKatakana = /[\u30a1-\u30fa\u30fd-\u30ff]/.test(text);
+
+  if (hasHiragana && hasKatakana) return 'mixed';
+  if (hasHiragana) return 'hiragana';
+  if (hasKatakana) return 'katakana';
+  return 'unknown';
 }
 
 function pickBestAudioMimeType(): { mimeType: string; ext: string } {
@@ -662,6 +674,7 @@ function App() {
       trialIndex: tempReading.trialIndex,
       stimulusId: tempReading.stimulus.id,
       stimulusText: tempReading.stimulus.text,
+      stimulusScript: getStimulusScript(tempReading.stimulus.text),
       length: tempReading.stimulus.text.length,
       stimOnsetMs: tempReading.stimOnsetMs,
       recordStartMs: tempReading.recordStartMs,
@@ -716,6 +729,7 @@ function App() {
       trialIndex: r.trialIndex,
       stimulusId: r.stimulusId,
       stimulusText: r.stimulusText,
+      stimulusScript: r.stimulusScript,
       length: r.length,
       rtKeyMs: r.rtKeyMs,
       audioFile: r.audioFile,
@@ -733,11 +747,68 @@ function App() {
     return new Blob([JSON.stringify(exportable, null, 2)], { type: 'application/json' });
   }
 
+  function createResultsCsvBlob() {
+    if (!meta) return null;
+    const escapeCsvCell = (value: string | number | undefined) => {
+      const text = value == null ? '' : String(value);
+      return `"${text.replaceAll('"', '""')}"`;
+    };
+
+    const headers = [
+      'subjectId',
+      'mode',
+      'trialIndex',
+      'stimulusId',
+      'stimulusText',
+      'stimulusScript',
+      'length',
+      'rtKeyMs',
+      'meaningRtMs',
+      'familiarity',
+      'confidence',
+      'exposureFreq',
+      'useFreq',
+      'audioFile',
+      'meaningAudioFile',
+    ];
+    const allResults = [...practiceResults, ...mainResults];
+    const rows = allResults.map((r) => [
+      meta.subjectId,
+      r.mode,
+      r.trialIndex,
+      r.stimulusId,
+      r.stimulusText,
+      r.stimulusScript,
+      r.length,
+      Math.round(r.rtKeyMs),
+      Math.round(r.meaningRtMs),
+      r.responses.familiarity,
+      r.responses.confidence,
+      r.responses.exposureFreq,
+      r.responses.useFreq,
+      r.audioFile,
+      r.meaningAudioFile,
+    ]);
+    const csv = [
+      headers.map(escapeCsvCell).join(','),
+      ...rows.map((row) => row.map(escapeCsvCell).join(',')),
+    ].join('\n');
+
+    return new Blob([`\uFEFF${csv}\n`], { type: 'text/csv;charset=utf-8' });
+  }
+
   function exportResultsJson() {
     if (!meta) return;
     const blob = createResultsJsonBlob();
     if (!blob) return;
     downloadBlob(blob, `${meta.subjectId || 'subject'}_results.json`);
+  }
+
+  function exportResultsCsv() {
+    if (!meta) return;
+    const blob = createResultsCsvBlob();
+    if (!blob) return;
+    downloadBlob(blob, `${meta.subjectId || 'subject'}_trials.csv`);
   }
 
   function exportAllAudio() {
@@ -751,13 +822,18 @@ function App() {
   async function exportAllDataZip() {
     if (!meta) return;
     const resultsBlob = createResultsJsonBlob();
-    if (!resultsBlob) return;
+    const csvBlob = createResultsCsvBlob();
+    if (!resultsBlob || !csvBlob) return;
 
     const allResults = [...practiceResults, ...mainResults];
     const files: ZipFileInput[] = [
       {
         filename: `${meta.subjectId || 'subject'}_results.json`,
         blob: resultsBlob,
+      },
+      {
+        filename: `${meta.subjectId || 'subject'}_trials.csv`,
+        blob: csvBlob,
       },
       ...allResults.flatMap((r) => [
         {
@@ -1041,6 +1117,7 @@ function App() {
                 <div className="flex flex-wrap gap-3">
                   <PrimaryButton onClick={exportAllDataZip}>データ一式をZIPでダウンロード</PrimaryButton>
                   <SecondaryButton onClick={exportResultsJson}>results.json のみ</SecondaryButton>
+                  <SecondaryButton onClick={exportResultsCsv}>CSV のみ</SecondaryButton>
                   <SecondaryButton onClick={exportAllAudio}>すべての音声をダウンロード</SecondaryButton>
                 </div>
               </div>

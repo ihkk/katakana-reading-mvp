@@ -82,9 +82,10 @@ At the end of the experiment, the app can download all data as a single ZIP file
 The ZIP contains:
 
 - `<subjectId>_results.json`
+- `<subjectId>_trials.csv`
 - `audio/` folder with all reading recordings and meaning/use recordings
 
-Separate JSON-only and audio-only downloads are also available as backup actions.
+Separate JSON-only, CSV-only, and audio-only downloads are also available as backup actions.
 
 ### Results JSON
 
@@ -106,6 +107,16 @@ It contains:
 - Likert survey responses
 
 The audio blobs themselves are not embedded in the JSON.
+
+### Trial CSV
+
+The CSV file is named:
+
+```text
+<subjectId>_trials.csv
+```
+
+It contains one row per completed trial, including the stimulus, script label (`hiragana`, `katakana`, or `mixed`), response times, survey scores, and audio file names.
 
 ### Audio Files
 
