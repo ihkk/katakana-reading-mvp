@@ -183,6 +183,45 @@ function getStimulusTextSizeClass(text: string) {
   return 'text-3xl sm:text-5xl lg:text-6xl';
 }
 
+type SurveyQuestion = {
+  key: keyof SurveyResponse;
+  label: string;
+  description: string;
+  lowLabel: string;
+  highLabel: string;
+};
+
+const SURVEY_QUESTIONS: SurveyQuestion[] = [
+  {
+    key: 'familiarity',
+    label: 'この単語を見たとき、どのくらい「知っている単語だ」と感じますか',
+    description: '単語としての見覚えや聞き覚えの程度を答えてください。',
+    lowLabel: 'まったく見覚えがない',
+    highLabel: 'よく知っている単語だと感じる',
+  },
+  {
+    key: 'confidence',
+    label: 'この単語の意味や使い方をどのくらい自信をもって答えられますか',
+    description: '意味の説明や例文作成をどのくらい自信をもってできるかを答えてください。',
+    lowLabel: 'まったく自信がない',
+    highLabel: 'とても自信がある',
+  },
+  {
+    key: 'exposureFreq',
+    label: '普段、この単語をどのくらい見たり聞いたりしますか',
+    description: '会話、授業、メディア、インターネットなどで接する頻度を答えてください。',
+    lowLabel: 'ほとんどない',
+    highLabel: 'とてもよくある',
+  },
+  {
+    key: 'useFreq',
+    label: '普段、自分でこの単語をどのくらい使いますか',
+    description: '話す、書く、入力するなど、自分から使う頻度を答えてください。',
+    lowLabel: 'ほとんど使わない',
+    highLabel: 'とてもよく使う',
+  },
+];
+
 const INSTRUCTION_PAGES = [
   {
     badge: 'Step 1',
@@ -192,20 +231,20 @@ const INSTRUCTION_PAGES = [
   },
   {
     badge: 'Step 2',
-    title: '単語の意味を口頭で説明します',
-    body: '読み上げが終わると、同じ単語について意味を説明する画面に進みます。録音開始ボタンを押して、知っている範囲で説明してください。',
-    note: '説明が終わったら Space キー、または終了ボタンを押してください。',
+    title: '単語の意味や使い方を口頭で答えます',
+    body: '読み上げが終わると、同じ単語について答える画面に進みます。意味を説明しても、例文を作ってもかまいません。',
+    note: 'わかる範囲で答えてください。答え終わったら Space キー、または終了ボタンを押してください。',
   },
   {
     badge: 'Step 3',
-    title: '4つの質問に回答します',
-    body: '各単語について、なじみ度、意味理解の自信度、普段の見聞き頻度、自分で使う頻度を1から5で回答します。',
-    note: 'すべて選ぶと、次の単語へ進めます。',
+    title: '短い質問に回答します',
+    body: '読み上げと口頭での回答が終わったあと、その単語について短い質問に答えます。',
+    note: '質問は一つずつ表示されます。あてはまる数字を選んで進んでください。',
   },
   {
     badge: 'Practice',
     title: 'まずは練習から始めます',
-    body: `操作に慣れるため、最初に${PRACTICE_STIMULI.length}回の練習試次があります。練習が終わると、本番（全${MAIN_STIMULI.length}試次）に進みます。`,
+    body: `操作に慣れるため、最初に${PRACTICE_STIMULI.length}回の練習があります。練習が終わると、本番に進みます。`,
     note: '準備ができたら、練習を開始してください。',
   },
 ];
@@ -602,13 +641,13 @@ function App() {
         <main className="flex flex-1 items-center justify-center py-4 sm:py-6">
 
           {phase === 'setup' && (
-            <CardShell className="max-w-4xl">
+            <CardShell className="max-w-6xl">
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>単語読み上げ予備実験
                   </Badge>
                   <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験の準備</h1>
-                  <p className="max-w-3xl text-lg leading-8 text-slate-600">
+                  <p className="max-w-6xl text-lg leading-8 text-slate-600">
                     被験者情報を入力し、マイク権限を許可してから実験を開始します。
                   </p>
                 </div>
@@ -667,7 +706,7 @@ function App() {
           )}
 
           {phase === 'instructions' && (
-            <CardShell className="max-w-4xl">
+            <CardShell className="max-w-6xl">
               <div className="space-y-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <Badge>Instructions</Badge>
@@ -724,7 +763,7 @@ function App() {
           )}
 
           {phase === 'countdown' && (
-            <CardShell className="max-w-3xl text-center">
+            <CardShell className="max-w-6xl text-center">
               <div className="space-y-10">
                 <Badge>{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
                 <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-9xl font-semibold text-sky-600 shadow-xl shadow-sky-100 sm:h-72 sm:w-72">
@@ -741,7 +780,7 @@ function App() {
           )}
 
           {phase === 'recording' && (
-            <CardShell className="max-w-5xl text-center">
+            <CardShell className="max-w-6xl text-center">
               <div className="space-y-12">
                 <div className="space-y-3">
                   <Badge>Reading Recording</Badge>
@@ -770,24 +809,24 @@ function App() {
           )}
 
           {phase === 'meaningRecording' && (
-            <CardShell className="max-w-4xl">
+            <CardShell className="max-w-6xl">
               <div className="space-y-8 text-center">
                 <div className="space-y-3">
                   <Badge>Meaning Recording</Badge>
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">単語の意味を口頭で答えてください</h2>
+                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">単語の意味や使い方を口頭で答えてください</h2>
                   <p className="text-xl leading-9 text-slate-600">
                     対象語: <span className="font-semibold text-slate-900">{currentStimulus.text}</span>
                   </p>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
                   <p className="text-2xl leading-10 text-slate-700">
-                    わかる範囲で説明してください。録音を開始して話し終わったら、Space キーまたは終了ボタンを押してください。
+                    意味を説明しても、例文を作ってもかまいません。わかる範囲で答えてください。
                   </p>
 
                   <div className="mt-6 flex flex-wrap justify-center gap-3">
                     <PrimaryButton onClick={startMeaningRecording_V2} disabled={isMeaningRecording}>
-                      {isMeaningRecording ? '録音中...' : '口述回答を開始'}
+                      {isMeaningRecording ? '録音中...' : '回答を録音する'}
                     </PrimaryButton>
                     <SecondaryButton onClick={stopMeaningRecording_V2} disabled={!isMeaningRecording}>
                       終了
@@ -807,7 +846,7 @@ function App() {
           )}
 
           {phase === 'intermission' && (
-            <CardShell className="max-w-3xl text-center">
+            <CardShell className="max-w-6xl text-center">
               <div className="space-y-8">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">
                   🎉
@@ -816,7 +855,7 @@ function App() {
                   <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">練習が完了しました</h2>
                   <p className="text-xl leading-9 text-slate-600">
                     実験の流れは掴めましたでしょうか？<br />
-                    ここから本番（全 {MAIN_STIMULI.length} 試次）が始まります。準備ができたら開始ボタンを押してください。
+                    ここから本番が始まります。準備ができたら開始ボタンを押してください。
                   </p>
                 </div>
                 <div className="flex justify-center pt-4">
@@ -827,7 +866,7 @@ function App() {
           )}
 
           {phase === 'done' && (
-            <CardShell className="max-w-3xl">
+            <CardShell className="max-w-6xl">
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>Completed</Badge>
@@ -864,39 +903,110 @@ function SurveyForm({
   stimulus: string;
   onSubmit: (response: SurveyResponse) => void;
 }) {
-  const [familiarity, setFamiliarity] = useState<number | null>(null);
-  const [confidence, setConfidence] = useState<number | null>(null);
-  const [exposureFreq, setExposureFreq] = useState<number | null>(null);
-  const [useFreq, setUseFreq] = useState<number | null>(null);
+  const [responses, setResponses] = useState<Partial<SurveyResponse>>({});
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const advanceTimerRef = useRef<number | null>(null);
 
-  function submit() {
-    if (familiarity == null || confidence == null || exposureFreq == null || useFreq == null) {
-      alert('Q1〜Q4 をすべて選択してください。');
+  const currentQuestion = SURVEY_QUESTIONS[questionIndex];
+  const currentValue = responses[currentQuestion.key] ?? null;
+  const isLastQuestion = questionIndex === SURVEY_QUESTIONS.length - 1;
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current != null) {
+        window.clearTimeout(advanceTimerRef.current);
+      }
+    };
+  }, []);
+
+  function selectResponse(value: number) {
+    if (isAdvancing) return;
+
+    const nextResponses = {
+      ...responses,
+      [currentQuestion.key]: value,
+    };
+
+    setResponses(nextResponses);
+    setIsAdvancing(true);
+
+    if (advanceTimerRef.current != null) {
+      window.clearTimeout(advanceTimerRef.current);
+    }
+
+    if (!isLastQuestion) {
+      advanceTimerRef.current = window.setTimeout(() => {
+        setQuestionIndex((prev) => prev + 1);
+        setIsAdvancing(false);
+        advanceTimerRef.current = null;
+      }, 280);
       return;
     }
-    onSubmit({ familiarity, confidence, exposureFreq, useFreq });
+
+    const completed = SURVEY_QUESTIONS.every((question) => nextResponses[question.key] != null);
+    if (!completed) {
+      setIsAdvancing(false);
+      alert('未回答の質問があります。');
+      return;
+    }
+
+    advanceTimerRef.current = window.setTimeout(() => {
+      onSubmit({
+        familiarity: nextResponses.familiarity!,
+        confidence: nextResponses.confidence!,
+        exposureFreq: nextResponses.exposureFreq!,
+        useFreq: nextResponses.useFreq!,
+      });
+      advanceTimerRef.current = null;
+    }, 280);
   }
 
   return (
-    <CardShell className="max-w-4xl">
+    <CardShell className="max-w-6xl">
       <div className="space-y-8">
-        <div className="space-y-3">
-          <Badge>Post-trial Survey</Badge>
-          <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">事後質問</h2>
-          <p className="text-xl leading-9 text-slate-600">
-            対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-3">
+            <Badge>Post-trial Survey</Badge>
+            <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">事後質問</h2>
+            <p className="text-xl leading-9 text-slate-600">
+              対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-semibold text-slate-600">
+            {questionIndex + 1} / {SURVEY_QUESTIONS.length}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3" aria-label="質問の進捗">
+          {SURVEY_QUESTIONS.map((question, index) => (
+            <div
+              key={question.key}
+              className={`h-3 rounded-full transition ${index <= questionIndex ? 'bg-sky-500' : 'bg-slate-200'}`}
+            />
+          ))}
+        </div>
+
+        <LikertQuestion
+          label={currentQuestion.label}
+          description={currentQuestion.description}
+          lowLabel={currentQuestion.lowLabel}
+          highLabel={currentQuestion.highLabel}
+          value={currentValue}
+          onChange={selectResponse}
+          disabled={isAdvancing}
+        />
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SecondaryButton
+            onClick={() => setQuestionIndex((prev) => Math.max(prev - 1, 0))}
+            disabled={questionIndex === 0 || isAdvancing}
+          >
+            戻る
+          </SecondaryButton>
+          <p className="text-lg leading-8 text-slate-500">
+            {isLastQuestion ? '数字を選ぶと次の trial に進みます。' : '数字を選ぶと次の質問に進みます。'}
           </p>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <LikertQuestion label="Q1. なじみ度" value={familiarity} onChange={setFamiliarity} />
-          <LikertQuestion label="Q2. 意味理解自信度" value={confidence} onChange={setConfidence} />
-          <LikertQuestion label="Q3. 普段の見聞き頻度" value={exposureFreq} onChange={setExposureFreq} />
-          <LikertQuestion label="Q4. 自分で使う頻度" value={useFreq} onChange={setUseFreq} />
-        </div>
-
-        <div className="flex justify-end">
-          <PrimaryButton onClick={submit}>次の trial へ</PrimaryButton>
         </div>
       </div>
     </CardShell>
@@ -1024,17 +1134,38 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LikertQuestion({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number) => void }) {
+function LikertQuestion({
+  label,
+  description,
+  lowLabel,
+  highLabel,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  description: string;
+  lowLabel: string;
+  highLabel: string;
+  value: number | null;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 text-xl font-semibold text-slate-800">{label}</div>
-      <div className="grid grid-cols-5 gap-2 sm:gap-3">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <div className="space-y-4">
+        <h3 className="text-3xl font-semibold leading-tight text-slate-900">{label}</h3>
+        <p className="text-xl leading-9 text-slate-600">{description}</p>
+      </div>
+
+      <div className="mt-8 grid grid-cols-5 gap-2 sm:gap-3">
         {likertOptions().map((n) => (
           <button
             key={n}
             onClick={() => onChange(n)}
-            className={`min-h-16 rounded-2xl border px-0 py-3 text-2xl font-semibold transition ${value === n
-              ? 'border-sky-500 bg-sky-500 text-white shadow-md shadow-sky-200'
+            disabled={disabled}
+            className={`min-h-16 rounded-2xl border px-0 py-3 text-2xl font-semibold transition duration-150 ${value === n
+              ? 'scale-105 border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
               : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
           >
@@ -1043,8 +1174,8 @@ function LikertQuestion({ label, value, onChange }: { label: string; value: numb
         ))}
       </div>
       <div className="mt-3 flex justify-between text-base font-medium text-slate-400">
-        <span>低い</span>
-        <span>高い</span>
+        <span>{lowLabel}</span>
+        <span className="text-right">{highLabel}</span>
       </div>
     </section>
   );
