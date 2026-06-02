@@ -1,73 +1,158 @@
-# React + TypeScript + Vite
+# Katakana Reading MVP
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based MVP for running a Japanese word reading experiment. Participants read displayed words aloud, explain each word's meaning orally, and answer a short post-trial survey. The app records audio locally in the browser and exports the collected results as downloadable files.
 
-Currently, two official plugins are available:
+## What This App Does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This project supports a simple experiment flow:
 
-## React Compiler
+1. Enter a participant `Subject ID`.
+2. Allow microphone access and optionally choose an input device.
+3. Read the experiment instructions.
+4. Complete 2 practice trials.
+5. Complete 28 main trials in randomized order.
+6. Download the results JSON and all recorded audio files.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Each trial contains:
 
-## Expanding the ESLint configuration
+- A 3-second countdown.
+- A displayed stimulus word.
+- A reading-aloud recording, stopped by pressing `Space` or clicking the button.
+- A meaning-explanation recording for the same word.
+- Four 1-5 Likert questions:
+  - Familiarity
+  - Confidence in meaning understanding
+  - Exposure frequency
+  - Usage frequency
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Tech Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Browser `MediaRecorder` API
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+There is no backend service. All recordings and result data are kept in browser memory during the session and exported through downloads at the end.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Getting Started
+
+Install dependencies:
+
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Start the development server:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+Preview a production build:
+
+```bash
+npm run preview
+```
+
+## Browser Requirements
+
+Use a modern browser that supports:
+
+- `navigator.mediaDevices.getUserMedia`
+- `MediaRecorder`
+- WebM audio recording
+
+Chrome or Edge are recommended for the most predictable recording behavior. The app must be served from `localhost` or a secure HTTPS origin for microphone access to work.
+
+## Output Files
+
+At the end of the experiment, the app provides two export actions.
+
+### Results JSON
+
+The downloaded JSON file is named:
+
+```text
+<subjectId>_results.json
+```
+
+It contains:
+
+- Participant metadata
+- Browser user agent
+- Practice and main stimulus order
+- Trial-level stimulus information
+- Reading response time
+- Meaning-response recording time
+- Audio file names
+- Likert survey responses
+
+The audio blobs themselves are not embedded in the JSON.
+
+### Audio Files
+
+The audio export downloads one reading recording and one meaning recording per completed trial:
+
+```text
+practice_001_reading.webm
+practice_001_meaning.webm
+trial_001_reading.webm
+trial_001_meaning.webm
+```
+
+The exact MIME type is selected from browser-supported WebM options.
+
+## Stimuli
+
+Stimuli are currently defined directly in `src/App.tsx`.
+
+- Practice stimuli: 2 items
+- Main stimuli: 28 items
+- Main stimuli are shuffled once when the app loads
+- Practice stimuli keep their defined order
+
+## Project Structure
+
+```text
+.
+├── public/
+│   ├── favicon.svg
+│   └── icons.svg
+├── src/
+│   ├── App.tsx       # Experiment flow, state, stimuli, recording, export UI
+│   ├── index.css     # Tailwind entry
+│   └── main.tsx      # React entry point
+├── vite.config.ts
+├── package.json
+└── README.md
+```
+
+## Current Limitations
+
+- Data is only stored in memory until exported. Refreshing the page loses the current session.
+- There is no backend upload, participant management, or automatic backup.
+- Stimuli are hard-coded in the React component.
+- The README describes the current MVP behavior, not a finalized research protocol.
+- Some legacy recording helper code remains in `src/App.tsx`; the active flow uses the `_V2` recording functions.
+
+## Development Notes
+
+Run linting:
+
+```bash
+npm run lint
+```
+
+Before using the app in a real session, do a short test run in the target browser and confirm that:
+
+- Microphone permission is granted.
+- Audio files download correctly.
+- The results JSON includes the expected number of practice and main trials.
+- Pressing `Space` reliably advances the recording steps.
