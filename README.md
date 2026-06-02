@@ -73,7 +73,18 @@ Chrome or Edge are recommended for the most predictable recording behavior. The 
 
 ## Output Files
 
-At the end of the experiment, the app provides two export actions.
+At the end of the experiment, the app can download all data as a single ZIP file:
+
+```text
+<subjectId>_experiment_data.zip
+```
+
+The ZIP contains:
+
+- `<subjectId>_results.json`
+- `audio/` folder with all reading recordings and meaning/use recordings
+
+Separate JSON-only and audio-only downloads are also available as backup actions.
 
 ### Results JSON
 
@@ -98,7 +109,7 @@ The audio blobs themselves are not embedded in the JSON.
 
 ### Audio Files
 
-The audio export downloads one reading recording and one meaning recording per completed trial:
+Inside the ZIP, each completed trial has one reading recording and one meaning/use recording:
 
 ```text
 practice_001_reading.webm

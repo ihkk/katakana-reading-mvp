@@ -86,6 +86,11 @@ type TempMeaningRecording = {
   audioFile?: string;
 };
 
+type ZipFileInput = {
+  filename: string;
+  blob: Blob;
+};
+
 // practice stimuli
 const PRACTICE_STIMULI: StimulusItem[] = [
   { id: 'p001', text: 'パソコン' },
@@ -96,32 +101,32 @@ const PRACTICE_STIMULI: StimulusItem[] = [
 const MAIN_STIMULI: StimulusItem[] = [
   { id: 'w001', text: 'エラー' },
   { id: 'w002', text: 'きんぐ' },
-  { id: 'w003', text: 'フロア' },
-  { id: 'w004', text: 'ぱすた' },
-  { id: 'w005', text: 'シナリオ' },
-  { id: 'w006', text: 'どらごん' },
-  { id: 'w007', text: 'ダメージ' },
-  { id: 'w008', text: 'ろーかる' },
-  { id: 'w009', text: 'ポジション' },
-  { id: 'w010', text: 'かめらまん' },
-  { id: 'w011', text: 'ストリート' },
-  { id: 'w012', text: 'こんぱくと' },
-  { id: 'w013', text: 'ステーション' },
-  { id: 'w014', text: 'ぷらいばしー' },
-  { id: 'w015', text: 'パンフレット' },
-  { id: 'w016', text: 'へりこぷたー' },
-  { id: 'w017', text: 'ジャーナリスト' },
-  { id: 'w018', text: 'いんふるえんざ' },
-  { id: 'w019', text: 'マーケティング' },
-  { id: 'w020', text: 'はーどでぃすく' },
-  { id: 'w021', text: 'シミュレーション' },
-  { id: 'w022', text: 'どきゅめんたりー' },
-  { id: 'w023', text: 'ファンデーション' },
-  { id: 'w024', text: 'しちゅえーしょん' },
-  { id: 'w025', text: 'アイデンティティー' },
-  { id: 'w026', text: 'いんふぉめーしょん' },
-  { id: 'w027', text: 'プレゼンテーション' },
-  { id: 'w028', text: 'すーぱーまーけっと' },
+  // { id: 'w003', text: 'フロア' },
+  // { id: 'w004', text: 'ぱすた' },
+  // { id: 'w005', text: 'シナリオ' },
+  // { id: 'w006', text: 'どらごん' },
+  // { id: 'w007', text: 'ダメージ' },
+  // { id: 'w008', text: 'ろーかる' },
+  // { id: 'w009', text: 'ポジション' },
+  // { id: 'w010', text: 'かめらまん' },
+  // { id: 'w011', text: 'ストリート' },
+  // { id: 'w012', text: 'こんぱくと' },
+  // { id: 'w013', text: 'ステーション' },
+  // { id: 'w014', text: 'ぷらいばしー' },
+  // { id: 'w015', text: 'パンフレット' },
+  // { id: 'w016', text: 'へりこぷたー' },
+  // { id: 'w017', text: 'ジャーナリスト' },
+  // { id: 'w018', text: 'いんふるえんざ' },
+  // { id: 'w019', text: 'マーケティング' },
+  // { id: 'w020', text: 'はーどでぃすく' },
+  // { id: 'w021', text: 'シミュレーション' },
+  // { id: 'w022', text: 'どきゅめんたりー' },
+  // { id: 'w023', text: 'ファンデーション' },
+  // { id: 'w024', text: 'しちゅえーしょん' },
+  // { id: 'w025', text: 'アイデンティティー' },
+  // { id: 'w026', text: 'いんふぉめーしょん' },
+  // { id: 'w027', text: 'プレゼンテーション' },
+  // { id: 'w028', text: 'すーぱーまーけっと' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -168,6 +173,118 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => {
     URL.revokeObjectURL(url);
   }, 3000);
+}
+
+const CRC32_TABLE = new Uint32Array(256).map((_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
+
+function calculateCrc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(output: number[], value: number) {
+  output.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function writeUint32(output: number[], value: number) {
+  output.push(
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff,
+  );
+}
+
+function getDosDateTime(date: Date) {
+  const year = Math.max(date.getFullYear(), 1980);
+  const dosTime =
+    (date.getHours() << 11) |
+    (date.getMinutes() << 5) |
+    Math.floor(date.getSeconds() / 2);
+  const dosDate =
+    ((year - 1980) << 9) |
+    ((date.getMonth() + 1) << 5) |
+    date.getDate();
+
+  return { dosDate, dosTime };
+}
+
+async function createZipBlob(files: ZipFileInput[]) {
+  const encoder = new TextEncoder();
+  const now = new Date();
+  const { dosDate, dosTime } = getDosDateTime(now);
+  const chunks: BlobPart[] = [];
+  const centralDirectory: number[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const filenameBytes = encoder.encode(file.filename);
+    const data = new Uint8Array(await file.blob.arrayBuffer());
+    const crc32 = calculateCrc32(data);
+    const localHeader: number[] = [];
+
+    writeUint32(localHeader, 0x04034b50);
+    writeUint16(localHeader, 20);
+    writeUint16(localHeader, 0x0800);
+    writeUint16(localHeader, 0);
+    writeUint16(localHeader, dosTime);
+    writeUint16(localHeader, dosDate);
+    writeUint32(localHeader, crc32);
+    writeUint32(localHeader, data.byteLength);
+    writeUint32(localHeader, data.byteLength);
+    writeUint16(localHeader, filenameBytes.byteLength);
+    writeUint16(localHeader, 0);
+
+    chunks.push(new Uint8Array(localHeader), filenameBytes, data);
+
+    writeUint32(centralDirectory, 0x02014b50);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 0x0800);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, dosTime);
+    writeUint16(centralDirectory, dosDate);
+    writeUint32(centralDirectory, crc32);
+    writeUint32(centralDirectory, data.byteLength);
+    writeUint32(centralDirectory, data.byteLength);
+    writeUint16(centralDirectory, filenameBytes.byteLength);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, 0);
+    writeUint32(centralDirectory, offset);
+    centralDirectory.push(...filenameBytes);
+
+    offset += localHeader.length + filenameBytes.byteLength + data.byteLength;
+  }
+
+  const centralDirectoryOffset = offset;
+  const centralDirectoryBytes = new Uint8Array(centralDirectory);
+  chunks.push(centralDirectoryBytes);
+  offset += centralDirectoryBytes.byteLength;
+
+  const endRecord: number[] = [];
+  writeUint32(endRecord, 0x06054b50);
+  writeUint16(endRecord, 0);
+  writeUint16(endRecord, 0);
+  writeUint16(endRecord, files.length);
+  writeUint16(endRecord, files.length);
+  writeUint32(endRecord, centralDirectoryBytes.byteLength);
+  writeUint32(endRecord, centralDirectoryOffset);
+  writeUint16(endRecord, 0);
+  chunks.push(new Uint8Array(endRecord));
+
+  return new Blob(chunks, { type: 'application/zip' });
 }
 
 function likertOptions() {
@@ -592,8 +709,8 @@ function App() {
     }
   }
 
-  function exportResultsJson() {
-    if (!meta) return;
+  function createResultsJsonBlob() {
+    if (!meta) return null;
     const formatTrials = (trials: TrialResult[]) => trials.map((r) => ({
       mode: r.mode,
       trialIndex: r.trialIndex,
@@ -613,7 +730,13 @@ function App() {
       mainTrials: formatTrials(mainResults),
     };
 
-    const blob = new Blob([JSON.stringify(exportable, null, 2)], { type: 'application/json' });
+    return new Blob([JSON.stringify(exportable, null, 2)], { type: 'application/json' });
+  }
+
+  function exportResultsJson() {
+    if (!meta) return;
+    const blob = createResultsJsonBlob();
+    if (!blob) return;
     downloadBlob(blob, `${meta.subjectId || 'subject'}_results.json`);
   }
 
@@ -623,6 +746,33 @@ function App() {
       downloadBlob(r.audioBlob, r.audioFile);
       downloadBlob(r.meaningAudioBlob, r.meaningAudioFile);
     });
+  }
+
+  async function exportAllDataZip() {
+    if (!meta) return;
+    const resultsBlob = createResultsJsonBlob();
+    if (!resultsBlob) return;
+
+    const allResults = [...practiceResults, ...mainResults];
+    const files: ZipFileInput[] = [
+      {
+        filename: `${meta.subjectId || 'subject'}_results.json`,
+        blob: resultsBlob,
+      },
+      ...allResults.flatMap((r) => [
+        {
+          filename: `audio/${r.audioFile}`,
+          blob: r.audioBlob,
+        },
+        {
+          filename: `audio/${r.meaningAudioFile}`,
+          blob: r.meaningAudioBlob,
+        },
+      ]),
+    ];
+
+    const zipBlob = await createZipBlob(files);
+    downloadBlob(zipBlob, `${meta.subjectId || 'subject'}_experiment_data.zip`);
   }
 
   const instructionPage = INSTRUCTION_PAGES[instructionPageIndex];
@@ -889,7 +1039,8 @@ function App() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <PrimaryButton onClick={exportResultsJson}>results.json をダウンロード</PrimaryButton>
+                  <PrimaryButton onClick={exportAllDataZip}>データ一式をZIPでダウンロード</PrimaryButton>
+                  <SecondaryButton onClick={exportResultsJson}>results.json のみ</SecondaryButton>
                   <SecondaryButton onClick={exportAllAudio}>すべての音声をダウンロード</SecondaryButton>
                 </div>
               </div>
