@@ -9,7 +9,7 @@ This project supports a simple experiment flow:
 1. Enter a participant `Subject ID`.
 2. Allow microphone access and optionally choose an input device.
 3. Read the experiment instructions.
-4. Complete 2 practice trials.
+4. Complete 3 practice trials: 1 guided practice trial followed by 2 normal practice trials.
 5. Complete 28 main trials in randomized order.
 6. Download the results JSON and all recorded audio files.
 
@@ -17,8 +17,8 @@ Each trial contains:
 
 - A 3-second countdown.
 - A displayed stimulus word.
-- A reading-aloud recording, stopped by pressing `Space` or clicking the button.
-- A meaning-explanation recording for the same word.
+- A reading-aloud recording, stopped by pressing `Space`.
+- A meaning/use recording for the same word, started automatically and stopped by pressing `Space`.
 - Four 1-5 Likert questions:
   - Familiarity
   - Confidence in meaning understanding
@@ -116,7 +116,7 @@ The CSV file is named:
 <subjectId>_trials.csv
 ```
 
-It contains one row per completed trial, including the stimulus, script label (`hiragana`, `katakana`, or `mixed`), response times, survey scores, and audio file names.
+It contains one row per completed trial, including the stimulus, script label (`hiragana`, `katakana`, or `mixed`), practice type (`guided`, `normal`, or `none`), response times, survey scores, and audio file names.
 
 ### Audio Files
 
@@ -135,7 +135,7 @@ The exact MIME type is selected from browser-supported WebM options.
 
 Stimuli are currently defined directly in `src/App.tsx`.
 
-- Practice stimuli: 2 items
+- Practice stimuli: 3 items
 - Main stimuli: 28 items
 - Main stimuli are shuffled once when the app loads
 - Practice stimuli keep their defined order

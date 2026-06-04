@@ -19,6 +19,7 @@ type Phase =
 
 type ExperimentMode = 'practice' | 'main';
 type StimulusScript = 'hiragana' | 'katakana' | 'mixed' | 'unknown';
+type PracticeType = 'guided' | 'normal' | 'none';
 
 type StimulusItem = {
   id: string;
@@ -34,6 +35,7 @@ type SurveyResponse = {
 
 type TrialResult = {
   mode: ExperimentMode;
+  practiceType: PracticeType;
   trialIndex: number;
   stimulusId: string;
   stimulusText: string;
@@ -97,6 +99,7 @@ type ZipFileInput = {
 const PRACTICE_STIMULI: StimulusItem[] = [
   { id: 'p001', text: 'パソコン' },
   { id: 'p002', text: 'てれび' },
+  { id: 'p003', text: 'ラジオ' },
 ];
 
 // formal stimuli
@@ -153,6 +156,11 @@ function getStimulusScript(text: string): StimulusScript {
   if (hasHiragana) return 'hiragana';
   if (hasKatakana) return 'katakana';
   return 'unknown';
+}
+
+function getPracticeType(mode: ExperimentMode, trialIndex: number): PracticeType {
+  if (mode !== 'practice') return 'none';
+  return trialIndex === 0 ? 'guided' : 'normal';
 }
 
 function pickBestAudioMimeType(): { mimeType: string; ext: string } {
@@ -356,13 +364,13 @@ const INSTRUCTION_PAGES = [
     badge: 'Step 1',
     title: '単語を声に出して読みます',
     body: 'カウントダウンのあと、画面中央に単語が大きく表示されます。表示された単語を、できるだけ自然な速度で声に出して読んでください。',
-    note: '読み終わったら、すぐに Space キー、または画面のボタンを押してください。',
+    note: '読み終わったら、すぐに Space キーを押してください。',
   },
   {
     badge: 'Step 2',
     title: '単語の意味や使い方を口頭で答えます',
-    body: '読み上げが終わると、同じ単語について答える画面に進みます。意味を説明しても、例文を作ってもかまいません。',
-    note: 'わかる範囲で答えてください。答え終わったら Space キー、または終了ボタンを押してください。',
+    body: '読み上げが終わると、同じ単語について答える画面に進み、自動で録音が始まります。意味を説明しても、例文を作ってもかまいません。',
+    note: 'わかる範囲で答えてください。答え終わったら Space キーを押してください。',
   },
   {
     badge: 'Step 3',
@@ -373,7 +381,7 @@ const INSTRUCTION_PAGES = [
   {
     badge: 'Practice',
     title: 'まずは練習から始めます',
-    body: `操作に慣れるため、最初に${PRACTICE_STIMULI.length}回の練習があります。練習が終わると、本番に進みます。`,
+    body: '最初の1回は操作ガイドを見ながら練習します。そのあと、本番と同じ形式で2回練習します。',
     note: '準備ができたら、練習を開始してください。',
   },
 ];
@@ -405,9 +413,11 @@ function App() {
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const meaningAutoStartKeyRef = useRef('');
 
   const activeStimuli = mode === 'practice' ? orderedPracticeStimuli : orderedMainStimuli;
   const currentStimulus = activeStimuli[currentTrialIndex];
+  const isGuidedPracticeTrial = getPracticeType(mode, currentTrialIndex) === 'guided';
 
   const currentResults = mode === 'practice' ? practiceResults : mainResults;
   const completedTrials = currentResults.length;
@@ -646,6 +656,20 @@ function App() {
   }, [phase, tempReading]);
 
   useEffect(() => {
+    if (phase !== 'meaningRecording' || isMeaningRecording || tempMeaning?.audioBlob) return;
+
+    const trialKey = `${mode}-${currentTrialIndex}`;
+    if (meaningAutoStartKeyRef.current === trialKey) return;
+
+    const timer = window.setTimeout(() => {
+      meaningAutoStartKeyRef.current = trialKey;
+      startMeaningRecording_V2();
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [phase, mode, currentTrialIndex, isMeaningRecording, tempMeaning?.audioBlob, startMeaningRecording_V2]);
+
+  useEffect(() => {
     if (phase !== 'meaningRecording') return;
 
     function onKeyDown(event: KeyboardEvent) {
@@ -665,12 +689,13 @@ function App() {
     }
 
     if (!tempMeaning?.audioBlob || tempMeaning.startMs == null || tempMeaning.stopMs == null) {
-      alert('Q1 の口述回答を録音してください。');
+      alert('口頭回答の録音が完了していません。');
       return;
     }
 
     const result: TrialResult = {
       mode,
+      practiceType: getPracticeType(mode, currentTrialIndex),
       trialIndex: tempReading.trialIndex,
       stimulusId: tempReading.stimulus.id,
       stimulusText: tempReading.stimulus.text,
@@ -726,6 +751,7 @@ function App() {
     if (!meta) return null;
     const formatTrials = (trials: TrialResult[]) => trials.map((r) => ({
       mode: r.mode,
+      practiceType: r.practiceType,
       trialIndex: r.trialIndex,
       stimulusId: r.stimulusId,
       stimulusText: r.stimulusText,
@@ -757,6 +783,7 @@ function App() {
     const headers = [
       'subjectId',
       'mode',
+      'practiceType',
       'trialIndex',
       'stimulusId',
       'stimulusText',
@@ -775,6 +802,7 @@ function App() {
     const rows = allResults.map((r) => [
       meta.subjectId,
       r.mode,
+      r.practiceType,
       r.trialIndex,
       r.stimulusId,
       r.stimulusText,
@@ -999,6 +1027,11 @@ function App() {
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-10">
                 <Badge>{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
+                {isGuidedPracticeTrial && (
+                  <GuideBox>
+                    これは操作ガイド付きの練習です。画面の案内を見ながら進めてください。
+                  </GuideBox>
+                )}
                 <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-9xl font-semibold text-sky-600 shadow-xl shadow-sky-100 sm:h-72 sm:w-72">
                   {countdown}
                 </div>
@@ -1020,6 +1053,12 @@ function App() {
                   <div className="text-lg text-slate-500">{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</div>
                 </div>
 
+                {isGuidedPracticeTrial && (
+                  <GuideBox>
+                    単語を声に出して読んでください。読み終わったら Space キーを押します。
+                  </GuideBox>
+                )}
+
                 <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-14 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-16">
                   {/* <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" /> */}
                   <div className={`whitespace-nowrap font-semibold leading-none text-slate-900 ${getStimulusTextSizeClass(currentStimulus.text)}`}>
@@ -1030,12 +1069,8 @@ function App() {
                 <div className="space-y-3">
                   <p className="text-3xl font-medium text-slate-900">読み上げてください</p>
                   <p className="text-xl leading-9 text-slate-600">
-                    読み終わったら <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-slate-700 border border-slate-200">Space</span> キー、または下のボタンを押してください。
+                    読み終わったら <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-slate-700 border border-slate-200">Space</span> キーを押してください。
                   </p>
-                </div>
-
-                <div className="flex justify-center">
-                  <PrimaryButton onClick={stopReadingRecording_V2}>次へ進む</PrimaryButton>
                 </div>
               </div>
             </CardShell>
@@ -1047,27 +1082,27 @@ function App() {
                 <div className="space-y-3">
                   <Badge>Meaning Recording</Badge>
                   <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">単語の意味や使い方を口頭で答えてください</h2>
-                  <p className="text-xl leading-9 text-slate-600">
-                    対象語: <span className="font-semibold text-slate-900">{currentStimulus.text}</span>
-                  </p>
+                  <div className="mx-auto inline-flex items-center gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-6 py-4 text-2xl font-semibold text-slate-900 shadow-sm sm:text-3xl">
+                    <span className="text-sky-700">対象語</span>
+                    <span>{currentStimulus.text}</span>
+                  </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
-                  <p className="text-2xl leading-10 text-slate-700">
-                    意味を説明しても、例文を作ってもかまいません。わかる範囲で答えてください。
-                  </p>
+                {isGuidedPracticeTrial && (
+                  <GuideBox>
+                    この画面に進むと自動で録音が始まります。答え終わったら Space キーを押します。
+                  </GuideBox>
+                )}
 
-                  <div className="mt-6 flex flex-wrap justify-center gap-3">
-                    <PrimaryButton onClick={startMeaningRecording_V2} disabled={isMeaningRecording}>
-                      {isMeaningRecording ? '録音中...' : '回答を録音する'}
-                    </PrimaryButton>
-                    <SecondaryButton onClick={stopMeaningRecording_V2} disabled={!isMeaningRecording}>
-                      終了
-                    </SecondaryButton>
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
+                  <div className="space-y-3 text-2xl leading-10 text-slate-700">
+                    <p>意味を説明しても、例文を作ってもかまいません。</p>
+                    <p>わかる範囲で答えてください。</p>
+                    <p>答え終わったら Space キーを押してください。</p>
                   </div>
 
                   <div className="mt-5 text-lg text-slate-500">
-                    {tempMeaning?.audioBlob ? '口述回答が保存されました。' : isMeaningRecording ? '録音中です…' : 'まだ録音されていません。'}
+                    {tempMeaning?.audioBlob ? '口頭回答が保存されました。' : isMeaningRecording ? '録音中です。Space キーで終了します。' : '録音を開始しています…'}
                   </div>
                 </div>
               </div>
@@ -1075,7 +1110,7 @@ function App() {
           )}
 
           {phase === 'survey' && (
-            <SurveyForm stimulus={currentStimulus.text} onSubmit={submitSurvey} />
+            <SurveyForm stimulus={currentStimulus.text} isGuidedPractice={isGuidedPracticeTrial} onSubmit={submitSurvey} />
           )}
 
           {phase === 'intermission' && (
@@ -1133,9 +1168,11 @@ function App() {
 
 function SurveyForm({
   stimulus,
+  isGuidedPractice,
   onSubmit,
 }: {
   stimulus: string;
+  isGuidedPractice: boolean;
   onSubmit: (response: SurveyResponse) => void;
 }) {
   const [responses, setResponses] = useState<Partial<SurveyResponse>>({});
@@ -1221,6 +1258,12 @@ function SurveyForm({
             />
           ))}
         </div>
+
+        {isGuidedPractice && (
+          <GuideBox>
+            あてはまる数字を選んでください。数字を選ぶと、短い確認のあと次の質問に進みます。
+          </GuideBox>
+        )}
 
         <LikertQuestion
           label={currentQuestion.label}
@@ -1369,6 +1412,14 @@ function InfoCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function GuideBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-5 text-center text-xl font-medium leading-9 text-amber-900 shadow-sm">
+      {children}
+    </div>
+  );
+}
+
 function LikertQuestion({
   label,
   description,
@@ -1408,9 +1459,9 @@ function LikertQuestion({
           </button>
         ))}
       </div>
-      <div className="mt-3 flex justify-between text-base font-medium text-slate-400">
-        <span>{lowLabel}</span>
-        <span className="text-right">{highLabel}</span>
+      <div className="mt-5 flex items-stretch justify-between gap-4 text-lg font-semibold text-slate-800">
+        <span className="flex min-h-14 max-w-[45%] items-center rounded-2xl bg-slate-100 px-4 py-3 text-left leading-7">{lowLabel}</span>
+        <span className="flex min-h-14 max-w-[45%] items-center justify-end rounded-2xl bg-slate-100 px-4 py-3 text-right leading-7">{highLabel}</span>
       </div>
     </section>
   );
