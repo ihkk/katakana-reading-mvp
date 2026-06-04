@@ -76,7 +76,7 @@ Chrome or Edge are recommended for the most predictable recording behavior. The 
 At the end of the experiment, the app can download all data as a single ZIP file:
 
 ```text
-<subjectId>_experiment_data.zip
+<subjectId>_<YYYYMMDD_HHMMSS>_experiment_data.zip
 ```
 
 The ZIP contains:

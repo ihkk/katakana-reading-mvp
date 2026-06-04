@@ -238,6 +238,23 @@ function getDosDateTime(date: Date) {
   return { dosDate, dosTime };
 }
 
+function formatLocalTimestampForFilename(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    '_',
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
+function sanitizeFilenamePart(value: string) {
+  return value.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'subject';
+}
+
 async function createZipBlob(files: ZipFileInput[]) {
   const encoder = new TextEncoder();
   const now = new Date();
@@ -876,7 +893,9 @@ function App() {
     ];
 
     const zipBlob = await createZipBlob(files);
-    downloadBlob(zipBlob, `${meta.subjectId || 'subject'}_experiment_data.zip`);
+    const subjectLabel = sanitizeFilenamePart(meta.subjectId || 'subject');
+    const timestamp = formatLocalTimestampForFilename(new Date());
+    downloadBlob(zipBlob, `${subjectLabel}_${timestamp}_experiment_data.zip`);
   }
 
   const instructionPage = INSTRUCTION_PAGES[instructionPageIndex];
@@ -1138,9 +1157,12 @@ function App() {
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>Completed</Badge>
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験完了</h2>
+                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl">実験は以上です</h2>
+                  <p className="text-3xl font-semibold leading-10 text-slate-900 sm:text-4xl">
+                    ご協力いただき、誠にありがとうございました。
+                  </p>
                   <p className="text-xl leading-9 text-slate-600">
-                    すべての trial が保存されました。ご協力ありがとうございました。
+                    すべての trial が保存されました。実験者がデータを保存しますので、少々お待ちください。
                   </p>
                 </div>
 
@@ -1261,7 +1283,7 @@ function SurveyForm({
 
         {isGuidedPractice && (
           <GuideBox>
-            あてはまる数字を選んでください。数字を選ぶと、短い確認のあと次の質問に進みます。
+            あてはまる数字を選んでください。数字を選ぶと、次の質問に進みます。
           </GuideBox>
         )}
 
