@@ -152,6 +152,22 @@ function getPracticeType(mode: ExperimentMode, trialIndex: number): PracticeType
   return trialIndex === 0 ? 'guided' : 'normal';
 }
 
+function getPhaseDisplayLabel(phase: Phase) {
+  const labels: Record<Phase, string> = {
+    setup: '準備',
+    instructions: '説明',
+    countdown: '準備中',
+    recording: '読み上げ',
+    meaningRecording: '音声回答',
+    survey: 'アンケート',
+    guidedPracticeCheck: '確認',
+    intermission: '本番前',
+    done: '完了',
+  };
+
+  return labels[phase];
+}
+
 function pickBestAudioMimeType(): { mimeType: string; ext: string } {
   const candidates = [
     { mimeType: 'audio/webm;codecs=opus', ext: 'webm' },
@@ -1099,7 +1115,7 @@ function App() {
           {phase === 'countdown' && (
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-10">
-                <Badge>{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
+                <Badge>{mode === 'practice' ? '練習' : '本番'} 単語 {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
                 {isGuidedPracticeTrial && (
                   <GuideBox>
                     これは操作ガイド付きの練習です。画面の案内を見ながら進めてください。
@@ -1123,7 +1139,7 @@ function App() {
               <div className="space-y-12">
                 <div className="space-y-3">
                   <Badge>Reading Recording</Badge>
-                  <div className="text-lg text-slate-500">{mode === 'practice' ? '練習' : '本番'} Trial {currentTrialIndex + 1} / {activeStimuli.length}</div>
+                  <div className="text-lg text-slate-500">{mode === 'practice' ? '練習' : '本番'} 単語 {currentTrialIndex + 1} / {activeStimuli.length}</div>
                 </div>
 
                 {isGuidedPracticeTrial && (
@@ -1256,7 +1272,7 @@ function App() {
                     ご協力いただき、誠にありがとうございました。
                   </p>
                   <p className="text-xl leading-9 text-slate-600">
-                    すべての trial が保存されました。実験者がデータを保存しますので、少々お待ちください。
+                    すべての回答が保存されました。実験者がデータを保存しますので、少々お待ちください。
                   </p>
                 </div>
 
@@ -1400,8 +1416,8 @@ function SurveyForm({
       <div className="space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3">
-            <Badge>Post-trial Survey</Badge>
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">事後質問</h2>
+            <Badge>Survey</Badge>
+            <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">アンケート</h2>
             <p className="text-xl leading-9 text-slate-600">
               対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
             </p>
@@ -1444,7 +1460,7 @@ function SurveyForm({
             戻る
           </SecondaryButton>
           <p className="text-lg leading-8 text-slate-500">
-            {isLastQuestion ? '数字を選ぶと次の trial に進みます。' : '数字を選ぶと次の質問に進みます。'}
+            {isLastQuestion ? '数字を選ぶと次の単語に進みます。' : '数字を選ぶと次の質問に進みます。'}
           </p>
         </div>
       </div>
@@ -1480,8 +1496,8 @@ function TopBar({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <MiniPill label="Phase" value={phase} />
-            <MiniPill label="Trial" value={`${Math.min(currentTrialIndex + 1, totalTrials)}/${totalTrials}`} />
+            <MiniPill label="段階" value={getPhaseDisplayLabel(phase)} />
+            <MiniPill label="単語" value={`${Math.min(currentTrialIndex + 1, totalTrials)}/${totalTrials}`} />
           </div>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">

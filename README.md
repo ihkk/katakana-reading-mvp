@@ -10,7 +10,7 @@ This project supports a simple experiment flow:
 2. Allow microphone access and optionally choose an input device.
 3. Read the experiment instructions.
 4. Complete 1 guided practice trial, pause for an experimenter check, then complete 2 normal practice trials.
-5. Complete 28 main trials in randomized order.
+5. Complete the main trials in randomized order.
 6. Download the results JSON and all recorded audio files.
 
 Each trial contains:
@@ -136,7 +136,7 @@ The exact MIME type is selected from browser-supported WebM options.
 Stimuli are currently defined directly in `src/App.tsx`.
 
 - Practice stimuli: 3 items
-- Main stimuli: 28 items
+- Main stimuli: defined in `MAIN_STIMULI`
 - Main stimuli are shuffled once when the app loads
 - Practice stimuli keep their defined order
 
