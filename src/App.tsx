@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import illustrationStep1 from './assets/illustration_step1.png';
+import illustrationStep2 from './assets/illustration_step2.png';
+import illustrationStep3 from './assets/illustration_step3.png';
 
 /**
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
- * setup -> instructions -> [ practice loop ] -> intermission -> [ main loop ] -> done
+ * setup -> instructions -> guided practice -> check pause -> normal practice -> intermission -> main -> done
  * Loop: countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
@@ -14,12 +17,14 @@ type Phase =
   | 'recording'
   | 'meaningRecording'
   | 'survey'
+  | 'guidedPracticeCheck'
   | 'intermission'
   | 'done';
 
 type ExperimentMode = 'practice' | 'main';
 type StimulusScript = 'hiragana' | 'katakana' | 'mixed' | 'unknown';
 type PracticeType = 'guided' | 'normal' | 'none';
+type InstructionReturnTarget = 'guidedPractice';
 
 type StimulusItem = {
   id: string;
@@ -104,34 +109,18 @@ const PRACTICE_STIMULI: StimulusItem[] = [
 
 // formal stimuli
 const MAIN_STIMULI: StimulusItem[] = [
-  { id: 'w001', text: 'エラー' },
-  { id: 'w002', text: 'きんぐ' },
+  { id: 'w001', text: 'ラスト' },
+  { id: 'w002', text: 'はしり' },
   { id: 'w003', text: 'フロア' },
-  { id: 'w004', text: 'ぱすた' },
-  { id: 'w005', text: 'シナリオ' },
-  { id: 'w006', text: 'どらごん' },
-  { id: 'w007', text: 'ダメージ' },
-  { id: 'w008', text: 'ろーかる' },
-  { id: 'w009', text: 'ポジション' },
-  { id: 'w010', text: 'かめらまん' },
-  { id: 'w011', text: 'ストリート' },
-  { id: 'w012', text: 'こんぱくと' },
-  { id: 'w013', text: 'ステーション' },
-  { id: 'w014', text: 'ぷらいばしー' },
-  { id: 'w015', text: 'パンフレット' },
-  { id: 'w016', text: 'へりこぷたー' },
-  { id: 'w017', text: 'ジャーナリスト' },
-  { id: 'w018', text: 'いんふるえんざ' },
-  { id: 'w019', text: 'マーケティング' },
-  { id: 'w020', text: 'はーどでぃすく' },
-  { id: 'w021', text: 'シミュレーション' },
-  { id: 'w022', text: 'どきゅめんたりー' },
-  { id: 'w023', text: 'ファンデーション' },
-  { id: 'w024', text: 'しちゅえーしょん' },
-  { id: 'w025', text: 'アイデンティティー' },
-  { id: 'w026', text: 'いんふぉめーしょん' },
-  { id: 'w027', text: 'プレゼンテーション' },
-  { id: 'w028', text: 'すーぱーまーけっと' },
+  { id: 'w004', text: 'まじる' },
+  { id: 'w005', text: 'ガイドライン' },
+  { id: 'w006', text: 'まぜあわせる' },
+  { id: 'w007', text: 'クリーニング' },
+  { id: 'w008', text: 'かんがえこむ' },
+  { id: 'w009', text: 'スーパーマーケット' },
+  { id: 'w010', text: 'のうりんぎょぎょう' },
+  { id: 'w011', text: 'リハビリテーション' },
+  { id: 'w012', text: 'すーぱーまーけっと' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -345,6 +334,16 @@ type SurveyQuestion = {
   highLabel: string;
 };
 
+type InstructionVisualType = 'reading' | 'meaning' | 'rating' | 'practice';
+
+type InstructionPage = {
+  badge: string;
+  title: string;
+  body: string;
+  note: string;
+  visual: InstructionVisualType;
+};
+
 const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     key: 'familiarity',
@@ -355,8 +354,8 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
   },
   {
     key: 'confidence',
-    label: 'この単語の意味や使い方をどのくらい自信をもって答えられますか',
-    description: '意味の説明や例文作成をどのくらい自信をもってできるかを答えてください。',
+    label: 'この単語の意味や例文をどのくらい自信をもって答えられますか',
+    description: '意味の説明や、この単語を使った文をどのくらい自信をもって作れるかを答えてください。',
     lowLabel: 'まったく自信がない',
     highLabel: 'とても自信がある',
   },
@@ -376,30 +375,34 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
   },
 ];
 
-const INSTRUCTION_PAGES = [
+const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Step 1',
     title: '単語を声に出して読みます',
     body: 'カウントダウンのあと、画面中央に単語が大きく表示されます。表示された単語を、できるだけ自然な速度で声に出して読んでください。',
     note: '読み終わったら、すぐに Space キーを押してください。',
+    visual: 'reading',
   },
   {
     badge: 'Step 2',
-    title: '単語の意味や使い方を口頭で答えます',
-    body: '読み上げが終わると、同じ単語について答える画面に進み、自動で録音が始まります。意味を説明しても、例文を作ってもかまいません。',
+    title: '意味や例文を声で答えます',
+    body: '読み上げが終わると、同じ単語について答える画面に進み、自動で録音が始まります。意味の説明でも、この単語を使った文でもかまいません。',
     note: 'わかる範囲で答えてください。答え終わったら Space キーを押してください。',
+    visual: 'meaning',
   },
   {
     badge: 'Step 3',
-    title: '短い質問に回答します',
-    body: '読み上げと口頭での回答が終わったあと、その単語について短い質問に答えます。',
+    title: 'アンケートで5段階評価に回答します',
+    body: '読み上げと声に出す回答が終わったあと、単語について表示されるアンケートに答えます。各質問では、1〜5 の数字を選びます。',
     note: '質問は一つずつ表示されます。数字を選ぶと次の質問に進みます。',
+    visual: 'rating',
   },
   {
     badge: 'Practice',
     title: 'まずは練習から始めます',
-    body: '最初の1回は操作ガイドを見ながら練習します。そのあと、本番と同じ形式で2回練習します。',
-    note: '準備ができたら、練習を開始してください。',
+    body: '最初の1回は操作ガイドを見ながら練習します。そのあと一度止まり、操作方法について確認してから、本番と同じ形式の練習に進みます。',
+    note: '不明な点があれば、確認の画面で実験者に質問できます。',
+    visual: 'practice',
   },
 ];
 
@@ -411,6 +414,7 @@ function App() {
   const [mode, setMode] = useState<ExperimentMode>('practice');
   const [subjectId, setSubjectId] = useState('');
   const [instructionPageIndex, setInstructionPageIndex] = useState(0);
+  const [instructionReturnTarget, setInstructionReturnTarget] = useState<InstructionReturnTarget | null>(null);
 
   const [streamReady, setStreamReady] = useState(false);
   const [permissionError, setPermissionError] = useState('');
@@ -521,10 +525,12 @@ function App() {
 
     // 进入说明环节
     setInstructionPageIndex(0);
+    setInstructionReturnTarget(null);
     setPhase('instructions');
   }
 
   function beginPractice() {
+    setInstructionReturnTarget(null);
     setMode('practice');
     setCurrentTrialIndex(0);
     setPracticeResults([]);
@@ -538,6 +544,41 @@ function App() {
     setMainResults([]);
     setCountdown(3);
     setPhase('countdown');
+  }
+
+  function beginNormalPractice() {
+    setInstructionReturnTarget(null);
+    setCurrentTrialIndex(1);
+    setCountdown(3);
+    setPhase('countdown');
+  }
+
+  function restartGuidedPractice() {
+    setInstructionReturnTarget(null);
+    setMode('practice');
+    setCurrentTrialIndex(0);
+    setPracticeResults([]);
+    setTempReading(null);
+    setTempMeaning(null);
+    setIsMeaningRecording(false);
+    meaningAutoStartKeyRef.current = '';
+    setCountdown(3);
+    setPhase('countdown');
+  }
+
+  function reviewInstructionsFromPracticeCheck() {
+    setInstructionPageIndex(0);
+    setInstructionReturnTarget('guidedPractice');
+    setPhase('instructions');
+  }
+
+  function completeInstructionPages() {
+    if (instructionReturnTarget === 'guidedPractice') {
+      restartGuidedPractice();
+      return;
+    }
+
+    beginPractice();
   }
 
   function createRecorder() {
@@ -706,7 +747,7 @@ function App() {
     }
 
     if (!tempMeaning?.audioBlob || tempMeaning.startMs == null || tempMeaning.stopMs == null) {
-      alert('口頭回答の録音が完了していません。');
+      alert('音声回答の録音が完了していません。');
       return;
     }
 
@@ -742,6 +783,11 @@ function App() {
 
     if (mode === 'practice') {
       setPracticeResults((prev) => [...prev, result]);
+      if (getPracticeType(mode, currentTrialIndex) === 'guided') {
+        setPhase('guidedPracticeCheck');
+        return;
+      }
+
       const isLast = currentTrialIndex >= orderedPracticeStimuli.length - 1;
       if (isLast) {
         setPhase('intermission');
@@ -995,20 +1041,26 @@ function App() {
                   </div>
                 </div>
 
-                <div className="min-h-[360px] space-y-8 rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
-                  <div className="inline-flex rounded-full bg-sky-50 px-4 py-2 text-lg font-semibold text-sky-700">
-                    {instructionPage.badge}
-                  </div>
-                  <div className="space-y-5">
-                    <h2 className="text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
-                      {instructionPage.title}
-                    </h2>
-                    <p className="text-2xl leading-10 text-slate-700">
-                      {instructionPage.body}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-xl leading-9 text-sky-800">
-                    {instructionPage.note}
+                <div className="min-h-[420px] rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
+                  <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-center">
+                    <InstructionIllustration type={instructionPage.visual} />
+
+                    <div className="space-y-8">
+                      <div className="inline-flex rounded-full bg-sky-50 px-4 py-2 text-lg font-semibold text-sky-700">
+                        {instructionPage.badge}
+                      </div>
+                      <div className="space-y-5">
+                        <h2 className="text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+                          {instructionPage.title}
+                        </h2>
+                        <p className="text-2xl leading-10 text-slate-700">
+                          {instructionPage.body}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-xl leading-9 text-sky-800">
+                        {instructionPage.note}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1029,7 +1081,9 @@ function App() {
                     戻る
                   </SecondaryButton>
                   {isLastInstructionPage ? (
-                    <PrimaryButton onClick={beginPractice}>練習を開始する</PrimaryButton>
+                    <PrimaryButton onClick={completeInstructionPages}>
+                      {instructionReturnTarget === 'guidedPractice' ? 'ガイド付き練習に戻る' : '練習を開始する'}
+                    </PrimaryButton>
                   ) : (
                     <PrimaryButton
                       onClick={() => setInstructionPageIndex((prev) => Math.min(prev + 1, INSTRUCTION_PAGES.length - 1))}
@@ -1100,7 +1154,7 @@ function App() {
               <div className="space-y-8 text-center">
                 <div className="space-y-3">
                   <Badge>Meaning Recording</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">単語の意味や使い方を口頭で答えてください</h2>
+                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">意味や例文を声で答えてください</h2>
                   <div className="mx-auto inline-flex items-center gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-6 py-4 text-2xl font-semibold text-slate-900 shadow-sm sm:text-3xl">
                     <span className="text-sky-700">対象語</span>
                     <span>{currentStimulus.text}</span>
@@ -1115,13 +1169,13 @@ function App() {
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
                   <div className="space-y-3 text-2xl leading-10 text-slate-700">
-                    <p>意味を説明しても、例文を作ってもかまいません。</p>
+                    <p>意味を説明しても、この単語を使った文を作ってもかまいません。</p>
                     <p>わかる範囲で答えてください。</p>
                     <p>答え終わったら Space キーを押してください。</p>
                   </div>
 
                   <div className="mt-5 text-lg text-slate-500">
-                    {tempMeaning?.audioBlob ? '口頭回答が保存されました。' : isMeaningRecording ? '録音中です。Space キーで終了します。' : '録音を開始しています…'}
+                    {tempMeaning?.audioBlob ? '音声回答が保存されました。' : isMeaningRecording ? '録音中です。Space キーで終了します。' : '録音を開始しています…'}
                   </div>
                 </div>
               </div>
@@ -1130,6 +1184,46 @@ function App() {
 
           {phase === 'survey' && (
             <SurveyForm stimulus={currentStimulus.text} isGuidedPractice={isGuidedPracticeTrial} onSubmit={submitSurvey} />
+          )}
+
+          {phase === 'guidedPracticeCheck' && (
+            <CardShell className="max-w-6xl">
+              <div className="space-y-8 text-center">
+                <Badge>Practice Check</Badge>
+                <div className="mx-auto max-w-4xl space-y-4">
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                    ここで一度確認します
+                  </h2>
+                  <p className="text-2xl leading-10 text-slate-700">
+                    ガイド付き練習が終わりました。操作方法について不明な点があれば、実験者に質問してください。
+                  </p>
+                </div>
+
+                <div className="grid gap-4 text-left sm:grid-cols-3">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-lg font-semibold text-sky-700">1. 読む</div>
+                    <p className="mt-2 text-lg leading-8 text-slate-600">単語を読み終わったら Space キーを押します。</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-lg font-semibold text-sky-700">2. 答える</div>
+                    <p className="mt-2 text-lg leading-8 text-slate-600">意味や例文を声で答えます。</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-lg font-semibold text-sky-700">3. 選ぶ</div>
+                    <p className="mt-2 text-lg leading-8 text-slate-600">アンケートで 1〜5 の数字を選びます。</p>
+                  </div>
+                </div>
+
+                <GuideBox>
+                  必要であれば、説明をもう一度確認してから、ガイド付き練習に戻ることができます。
+                </GuideBox>
+
+                <div className="flex flex-col-reverse items-center justify-center gap-3 pt-2 sm:flex-row">
+                  <SecondaryButton onClick={reviewInstructionsFromPracticeCheck}>説明をもう一度確認する</SecondaryButton>
+                  <PrimaryButton onClick={beginNormalPractice}>通常練習へ進む</PrimaryButton>
+                </div>
+              </div>
+            </CardShell>
           )}
 
           {phase === 'intermission' && (
@@ -1187,6 +1281,51 @@ function App() {
 }
 
 // ---- Sub Components ----
+
+function InstructionIllustration({ type }: { type: InstructionVisualType }) {
+  const illustrationSrcByType: Partial<Record<InstructionVisualType, string>> = {
+    reading: illustrationStep1,
+    meaning: illustrationStep2,
+    rating: illustrationStep3,
+  };
+  const illustrationSrc = illustrationSrcByType[type];
+
+  if (type === 'practice') {
+    return (
+      <div className="rounded-[2rem] border border-amber-100 bg-amber-50 p-6 shadow-inner">
+        <div className="space-y-4 rounded-3xl bg-white p-6 shadow-sm">
+          <div className="grid grid-cols-3 gap-3">
+            {['読む', '答える', '選ぶ'].map((label, index) => (
+              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center">
+                <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 text-lg font-semibold text-white">
+                  {index + 1}
+                </div>
+                <div className="text-lg font-semibold text-slate-800">{label}</div>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-center text-xl font-semibold leading-8 text-amber-900">
+            確認してから通常練習へ
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex min-h-72 items-center justify-center overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-50"
+      data-illustration-slot={type}
+    >
+      <img
+        src={illustrationSrc}
+        alt=""
+        className="h-full max-h-[360px] w-full object-contain"
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 function SurveyForm({
   stimulus,

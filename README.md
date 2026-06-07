@@ -1,6 +1,6 @@
 # Katakana Reading MVP
 
-A browser-based MVP for running a Japanese word reading experiment. Participants read displayed words aloud, explain each word's meaning orally, and answer a short post-trial survey. The app records audio locally in the browser and exports the collected results as downloadable files.
+A browser-based MVP for running a Japanese word reading experiment. Participants read displayed words aloud, answer what they know about each word's meaning or provide an example sentence by voice, and respond to 1-5 post-trial questions. The app records audio locally in the browser and exports the collected results as downloadable files.
 
 ## What This App Does
 
@@ -9,7 +9,7 @@ This project supports a simple experiment flow:
 1. Enter a participant `Subject ID`.
 2. Allow microphone access and optionally choose an input device.
 3. Read the experiment instructions.
-4. Complete 3 practice trials: 1 guided practice trial followed by 2 normal practice trials.
+4. Complete 1 guided practice trial, pause for an experimenter check, then complete 2 normal practice trials.
 5. Complete 28 main trials in randomized order.
 6. Download the results JSON and all recorded audio files.
 
@@ -18,8 +18,8 @@ Each trial contains:
 - A 3-second countdown.
 - A displayed stimulus word.
 - A reading-aloud recording, stopped by pressing `Space`.
-- A meaning/use recording for the same word, started automatically and stopped by pressing `Space`.
-- Four 1-5 Likert questions:
+- A meaning/example-sentence recording for the same word, started automatically and stopped by pressing `Space`.
+- One-at-a-time 1-5 Likert questions:
   - Familiarity
   - Confidence in meaning understanding
   - Exposure frequency
@@ -83,7 +83,7 @@ The ZIP contains:
 
 - `<subjectId>_results.json`
 - `<subjectId>_trials.csv`
-- `audio/` folder with all reading recordings and meaning/use recordings
+- `audio/` folder with all reading recordings and meaning/example-sentence recordings
 
 Separate JSON-only, CSV-only, and audio-only downloads are also available as backup actions.
 
@@ -120,7 +120,7 @@ It contains one row per completed trial, including the stimulus, script label (`
 
 ### Audio Files
 
-Inside the ZIP, each completed trial has one reading recording and one meaning/use recording:
+Inside the ZIP, each completed trial has one reading recording and one meaning/example-sentence recording:
 
 ```text
 practice_001_reading.webm
