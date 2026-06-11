@@ -9,9 +9,12 @@ This project supports a simple experiment flow:
 1. Enter a participant `Subject ID`.
 2. Allow microphone access and optionally choose an input device.
 3. Read the experiment instructions.
-4. Complete 5 practice trials using the same flow as the main trials.
-5. Complete the main trials in randomized order.
-6. Download the results JSON and all recorded audio files.
+4. Confirm that the participant understands the instructions before practice, with an option to review them again.
+5. Complete 5 practice trials using the same flow as the main trials.
+6. Confirm that the participant is ready for the main trials, with an option to repeat the 5 practice trials.
+7. Complete the main trials in randomized order.
+8. Complete a final background questionnaire about Japanese and English language experience.
+9. Download the results JSON, CSV files, and all recorded audio files.
 
 Each trial contains:
 
@@ -25,6 +28,14 @@ Each trial contains:
   - Confidence in meaning understanding
   - Exposure frequency
   - Usage frequency
+
+The final background questionnaire records:
+
+- Whether Japanese is the participant's native language
+- Japanese learning period when Japanese is not the native language
+- Japanese proficiency tests such as JLPT or J.TEST when Japanese is not the native language
+- English proficiency tests such as TOEIC, TOEFL, IELTS, or Eiken
+- Other languages the participant can use, selected from common options with an additional "other" field
 
 ## Tech Stack
 

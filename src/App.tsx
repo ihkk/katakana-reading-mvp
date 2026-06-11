@@ -6,24 +6,27 @@ import illustrationStep3 from './assets/illustration_step3.png';
 /**
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
- * setup -> instructions -> practice -> intermission -> main -> done
+ * setup -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
  * Loop: ready -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
 type Phase =
   | 'setup'
   | 'instructions'
+  | 'practiceConfirmation'
   | 'ready'
   | 'countdown'
   | 'recording'
   | 'meaningRecording'
   | 'survey'
   | 'intermission'
+  | 'backgroundSurvey'
   | 'done';
 
 type ExperimentMode = 'practice' | 'main';
 type StimulusScript = 'hiragana' | 'katakana' | 'mixed' | 'unknown';
 type PracticeType = 'normal' | 'none';
+type InstructionReturnTarget = 'practice' | 'main' | null;
 
 type StimulusItem = {
   id: string;
@@ -35,6 +38,14 @@ type SurveyResponse = {
   confidence: number;
   exposureFreq: number;
   useFreq: number;
+};
+
+type BackgroundSurveyResponse = {
+  japaneseNative: 'yes' | 'no';
+  japaneseLearningPeriod: string;
+  japaneseCertification: string;
+  englishProficiency: string;
+  otherLanguages: string;
 };
 
 type TrialResult = {
@@ -102,26 +113,26 @@ type ZipFileInput = {
 // practice stimuli
 const PRACTICE_STIMULI: StimulusItem[] = [
   { id: 'p001', text: 'パソコン' },
-  { id: 'p002', text: 'てれび' },
-  { id: 'p003', text: 'ラジオ' },
-  { id: 'p004', text: 'おやつ' },
-  { id: 'p005', text: 'カメラ' },
+  // { id: 'p002', text: 'てれび' },
+  // { id: 'p003', text: 'ラジオ' },
+  // { id: 'p004', text: 'おやつ' },
+  // { id: 'p005', text: 'カメラ' },
 ];
 
 // formal stimuli
 const MAIN_STIMULI: StimulusItem[] = [
   { id: 'w001', text: 'ラスト' },
-  { id: 'w002', text: 'こもの' },
-  { id: 'w003', text: 'フロア' },
-  { id: 'w004', text: 'たから' },
-  { id: 'w005', text: 'ガイドライン' },
-  { id: 'w006', text: 'おおよろこび' },
-  { id: 'w007', text: 'クリーニング' },
-  { id: 'w008', text: 'おさななじみ' },
-  { id: 'w009', text: 'スーパーマーケット' },
-  { id: 'w010', text: 'のうりんぎょぎょう' },
-  { id: 'w011', text: 'リハビリテーション' },
-  { id: 'w012', text: 'こみゅにけーしょん' },
+  // { id: 'w002', text: 'こもの' },
+  // { id: 'w003', text: 'フロア' },
+  // { id: 'w004', text: 'たから' },
+  // { id: 'w005', text: 'ガイドライン' },
+  // { id: 'w006', text: 'おおよろこび' },
+  // { id: 'w007', text: 'クリーニング' },
+  // { id: 'w008', text: 'おさななじみ' },
+  // { id: 'w009', text: 'スーパーマーケット' },
+  // { id: 'w010', text: 'のうりんぎょぎょう' },
+  // { id: 'w011', text: 'リハビリテーション' },
+  // { id: 'w012', text: 'こみゅにけーしょん' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -158,12 +169,14 @@ function getPhaseDisplayLabel(phase: Phase) {
   const labels: Record<Phase, string> = {
     setup: '準備',
     instructions: '説明',
+    practiceConfirmation: '練習前',
     ready: '開始前',
     countdown: '準備中',
     recording: '読み上げ',
     meaningRecording: '音声回答',
     survey: 'アンケート',
     intermission: '本番前',
+    backgroundSurvey: '背景アンケート',
     done: '完了',
   };
 
@@ -346,8 +359,7 @@ function getStimulusTextSizeClass(text: string) {
 
 type SurveyQuestion = {
   key: keyof SurveyResponse;
-  label: (stimulus: string) => string;
-  description: (stimulus: string) => string;
+  prompt: (stimulus: string) => string;
   lowLabel: string;
   highLabel: string;
 };
@@ -366,32 +378,39 @@ type InstructionPage = {
 const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     key: 'familiarity',
-    label: (stimulus) => `「${stimulus}」という単語を見たとき、どのくらい「知っている単語だ」と感じますか`,
-    description: (stimulus) => `「${stimulus}」という単語について、見覚えや聞き覚えの程度を答えてください。`,
+    prompt: (stimulus) => `「${stimulus}」という単語について、見覚えや聞き覚えはどのくらいありますか`,
     lowLabel: 'まったく見覚えがない',
     highLabel: 'よく知っている単語だと感じる',
   },
   {
     key: 'confidence',
-    label: (stimulus) => `「${stimulus}」という単語の意味や例文をどのくらい自信をもって答えられますか`,
-    description: (stimulus) => `「${stimulus}」という単語の意味の説明や、「${stimulus}」という単語を使った文をどのくらい自信をもって作れるかを答えてください。`,
+    prompt: (stimulus) => `「${stimulus}」という単語の意味の説明や例文作成に、どのくらい自信がありますか`,
     lowLabel: 'まったく自信がない',
     highLabel: 'とても自信がある',
   },
   {
     key: 'exposureFreq',
-    label: (stimulus) => `普段、「${stimulus}」という単語をどのくらい見たり聞いたりしますか`,
-    description: (stimulus) => `会話、授業、メディア、インターネットなどで「${stimulus}」という単語に接する頻度を答えてください。`,
+    prompt: (stimulus) => `普段、会話・授業・メディア・インターネットなどで「${stimulus}」という単語をどのくらい見たり聞いたりしますか`,
     lowLabel: 'ほとんどない',
     highLabel: 'とてもよくある',
   },
   {
     key: 'useFreq',
-    label: (stimulus) => `普段、自分で「${stimulus}」という単語をどのくらい使いますか`,
-    description: (stimulus) => `話す、書く、入力するなど、自分から「${stimulus}」という単語を使う頻度を答えてください。`,
+    prompt: (stimulus) => `普段、話す・書く・入力する場面で、自分から「${stimulus}」という単語をどのくらい使いますか`,
     lowLabel: 'ほとんど使わない',
     highLabel: 'とてもよく使う',
   },
+];
+
+const OTHER_LANGUAGE_OPTIONS = [
+  '中国語',
+  '韓国語',
+  'フランス語',
+  'オランダ語',
+  'ドイツ語',
+  'スペイン語',
+  'ポルトガル語',
+  'その他',
 ];
 
 const INSTRUCTION_PAGES: InstructionPage[] = [
@@ -431,6 +450,7 @@ function App() {
   const [mode, setMode] = useState<ExperimentMode>('practice');
   const [subjectId, setSubjectId] = useState('');
   const [instructionPageIndex, setInstructionPageIndex] = useState(0);
+  const [instructionReturnTarget, setInstructionReturnTarget] = useState<InstructionReturnTarget>(null);
 
   const [streamReady, setStreamReady] = useState(false);
   const [permissionError, setPermissionError] = useState('');
@@ -442,6 +462,7 @@ function App() {
 
   const [practiceResults, setPracticeResults] = useState<TrialResult[]>([]);
   const [mainResults, setMainResults] = useState<TrialResult[]>([]);
+  const [backgroundSurvey, setBackgroundSurvey] = useState<BackgroundSurveyResponse | null>(null);
   const [meta, setMeta] = useState<ExperimentMeta | null>(null);
 
   const [tempReading, setTempReading] = useState<TempReadingRecording | null>(null);
@@ -539,11 +560,13 @@ function App() {
     });
 
     // 进入说明环节
+    setInstructionReturnTarget(null);
     setInstructionPageIndex(0);
     setPhase('instructions');
   }
 
   function beginPractice() {
+    setInstructionReturnTarget(null);
     setMode('practice');
     setCurrentTrialIndex(0);
     setPracticeResults([]);
@@ -552,6 +575,7 @@ function App() {
   }
 
   function beginMainExperiment() {
+    setInstructionReturnTarget(null);
     setMode('main');
     setCurrentTrialIndex(0);
     setMainResults([]);
@@ -560,7 +584,20 @@ function App() {
   }
 
   function completeInstructionPages() {
-    beginPractice();
+    if (instructionReturnTarget === 'main') {
+      setInstructionReturnTarget(null);
+      setPhase('intermission');
+      return;
+    }
+
+    setInstructionReturnTarget(null);
+    setPhase('practiceConfirmation');
+  }
+
+  function reviewInstructions(target: Exclude<InstructionReturnTarget, null>) {
+    setInstructionReturnTarget(target);
+    setInstructionPageIndex(0);
+    setPhase('instructions');
   }
 
   function createRecorder() {
@@ -777,8 +814,7 @@ function App() {
       setMainResults((prev) => [...prev, result]);
       const isLast = currentTrialIndex >= orderedMainStimuli.length - 1;
       if (isLast) {
-        setMeta((prev) => (prev ? { ...prev, endTimeIso: new Date().toISOString() } : prev));
-        setPhase('done');
+        setPhase('backgroundSurvey');
       } else {
         setCurrentTrialIndex((prev) => prev + 1);
         setCountdown(3);
@@ -790,6 +826,12 @@ function App() {
   function startCurrentTrial() {
     setCountdown(3);
     setPhase('countdown');
+  }
+
+  function submitBackgroundSurvey(response: BackgroundSurveyResponse) {
+    setBackgroundSurvey(response);
+    setMeta((prev) => (prev ? { ...prev, endTimeIso: new Date().toISOString() } : prev));
+    setPhase('done');
   }
 
   function createResultsJsonBlob() {
@@ -811,6 +853,7 @@ function App() {
 
     const exportable = {
       meta,
+      backgroundSurvey,
       practiceTrials: formatTrials(practiceResults),
       mainTrials: formatTrials(mainResults),
     };
@@ -870,6 +913,37 @@ function App() {
     return new Blob([`\uFEFF${csv}\n`], { type: 'text/csv;charset=utf-8' });
   }
 
+  function createBackgroundSurveyCsvBlob() {
+    if (!meta || !backgroundSurvey) return null;
+    const escapeCsvCell = (value: string | number | undefined) => {
+      const text = value == null ? '' : String(value);
+      return `"${text.replaceAll('"', '""')}"`;
+    };
+
+    const headers = [
+      'subjectId',
+      'japaneseNative',
+      'japaneseLearningPeriod',
+      'japaneseCertification',
+      'englishProficiency',
+      'otherLanguages',
+    ];
+    const row = [
+      meta.subjectId,
+      backgroundSurvey.japaneseNative,
+      backgroundSurvey.japaneseLearningPeriod,
+      backgroundSurvey.japaneseCertification,
+      backgroundSurvey.englishProficiency,
+      backgroundSurvey.otherLanguages,
+    ];
+    const csv = [
+      headers.map(escapeCsvCell).join(','),
+      row.map(escapeCsvCell).join(','),
+    ].join('\n');
+
+    return new Blob([`\uFEFF${csv}\n`], { type: 'text/csv;charset=utf-8' });
+  }
+
   function exportResultsJson() {
     if (!meta) return;
     const blob = createResultsJsonBlob();
@@ -882,6 +956,11 @@ function App() {
     const blob = createResultsCsvBlob();
     if (!blob) return;
     downloadBlob(blob, `${meta.subjectId || 'subject'}_trials.csv`);
+
+    const backgroundBlob = createBackgroundSurveyCsvBlob();
+    if (backgroundBlob) {
+      downloadBlob(backgroundBlob, `${meta.subjectId || 'subject'}_background_survey.csv`);
+    }
   }
 
   function exportAllAudio() {
@@ -896,6 +975,7 @@ function App() {
     if (!meta) return;
     const resultsBlob = createResultsJsonBlob();
     const csvBlob = createResultsCsvBlob();
+    const backgroundCsvBlob = createBackgroundSurveyCsvBlob();
     if (!resultsBlob || !csvBlob) return;
 
     const allResults = [...practiceResults, ...mainResults];
@@ -908,6 +988,10 @@ function App() {
         filename: `${meta.subjectId || 'subject'}_trials.csv`,
         blob: csvBlob,
       },
+      ...(backgroundCsvBlob ? [{
+        filename: `${meta.subjectId || 'subject'}_background_survey.csv`,
+        blob: backgroundCsvBlob,
+      }] : []),
       ...allResults.flatMap((r) => [
         {
           filename: `audio/${r.audioFile}`,
@@ -935,7 +1019,7 @@ function App() {
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
 
         {/* TopBar 只有在非 setup 且非说明页面显示 */}
-        {phase !== 'setup' && phase !== 'instructions' && phase !== 'intermission' && (
+        {phase !== 'setup' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
           <TopBar
             subjectId={subjectId}
             phase={phase}
@@ -1071,7 +1155,7 @@ function App() {
                   </SecondaryButton>
                   {isLastInstructionPage ? (
                     <PrimaryButton onClick={completeInstructionPages}>
-                      練習を開始する
+                      確認画面へ進む
                     </PrimaryButton>
                   ) : (
                     <PrimaryButton
@@ -1085,10 +1169,32 @@ function App() {
             </CardShell>
           )}
 
+          {phase === 'practiceConfirmation' && (
+            <CardShell className="max-w-6xl text-center">
+              <div className="space-y-8">
+                <Badge>練習前確認</Badge>
+                <div className="space-y-4">
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                    操作方法はわかりましたか
+                  </h2>
+                  <p className="text-xl leading-9 text-slate-600">
+                    不明な点があれば、説明をもう一度確認できます。<br />
+                    準備ができたら練習を始めてください。
+                  </p>
+                </div>
+                <div className="flex flex-col-reverse justify-center gap-3 pt-4 sm:flex-row">
+                  <SecondaryButton onClick={() => reviewInstructions('practice')}>
+                    説明をもう一度確認する
+                  </SecondaryButton>
+                  <PrimaryButton onClick={beginPractice}>練習を開始する</PrimaryButton>
+                </div>
+              </div>
+            </CardShell>
+          )}
+
           {phase === 'ready' && (
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-8">
-                <Badge>{mode === 'practice' ? '練習' : '本番'} 単語 {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
                 <div className="space-y-4">
                   <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                     準備ができたら開始してください
@@ -1107,14 +1213,13 @@ function App() {
           {phase === 'countdown' && (
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-10">
-                <Badge>{mode === 'practice' ? '練習' : '本番'} 単語 {currentTrialIndex + 1} / {activeStimuli.length}</Badge>
                 <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-9xl font-semibold text-sky-600 shadow-xl shadow-sky-100 sm:h-72 sm:w-72">
                   {countdown}
                 </div>
                 <div className="space-y-3">
                   <h2 className="text-4xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
-                  <p className="text-xl leading-9 text-slate-600">
-                    表示されたら読み上げ、読み終わったら Space キーを押してください。
+                  <p className="text-2xl font-semibold text-slate-600">
+                    読む → Space
                   </p>
                 </div>
               </div>
@@ -1124,11 +1229,6 @@ function App() {
           {phase === 'recording' && (
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-12">
-                <div className="space-y-3">
-                  <Badge>単語の読み上げ</Badge>
-                  <div className="text-lg text-slate-500">{mode === 'practice' ? '練習' : '本番'} 単語 {currentTrialIndex + 1} / {activeStimuli.length}</div>
-                </div>
-
                 <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-14 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-16">
                   {/* <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" /> */}
                   <div className={`whitespace-nowrap font-semibold leading-none text-slate-900 ${getStimulusTextSizeClass(currentStimulus.text)}`}>
@@ -1149,13 +1249,12 @@ function App() {
           {phase === 'meaningRecording' && (
             <CardShell className="max-w-6xl">
               <div className="space-y-8 text-center">
-                <div className="space-y-3">
-                  <Badge>意味や例文の回答</Badge>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">意味や例文を声で答えてください</h2>
-                  <div className="mx-auto inline-flex items-center gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-6 py-4 text-2xl font-semibold text-slate-900 shadow-sm sm:text-3xl">
-                    <span className="text-sky-700">対象語</span>
-                    <span>{currentStimulus.text}</span>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="mx-auto inline-flex flex-col items-center gap-2 rounded-3xl border border-sky-200 bg-sky-50 px-8 py-5 font-semibold text-slate-900 shadow-sm">
+                    <span className="text-xl text-sky-700 sm:text-2xl">対象語</span>
+                    <span className="text-4xl sm:text-5xl">{currentStimulus.text}</span>
                   </div>
+                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">意味や例文を声で答えてください</h2>
                 </div>
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
@@ -1171,6 +1270,10 @@ function App() {
             <SurveyForm stimulus={currentStimulus.text} onSubmit={submitSurvey} />
           )}
 
+          {phase === 'backgroundSurvey' && (
+            <BackgroundSurveyForm onSubmit={submitBackgroundSurvey} />
+          )}
+
           {phase === 'intermission' && (
             <CardShell className="max-w-6xl text-center">
               <div className="space-y-8">
@@ -1184,7 +1287,10 @@ function App() {
                     ここから本番が始まります。準備ができたら開始ボタンを押してください。
                   </p>
                 </div>
-                <div className="flex justify-center pt-4">
+                <div className="flex flex-col-reverse justify-center gap-3 pt-4 sm:flex-row">
+                  <SecondaryButton onClick={beginPractice}>
+                    練習をもう一度行う
+                  </SecondaryButton>
                   <PrimaryButton onClick={beginMainExperiment}>本番を開始する</PrimaryButton>
                 </div>
               </div>
@@ -1207,6 +1313,7 @@ function App() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <InfoCard label="保存済み 本番データ" value={`${mainResults.length} 件`} />
+                  <InfoCard label="背景アンケート" value={backgroundSurvey ? '回答済み' : '未回答'} />
                   <InfoCard label="Subject ID" value={meta?.subjectId || '-'} />
                 </div>
 
@@ -1343,7 +1450,6 @@ function SurveyForm({
       <div className="space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3">
-            <Badge>Survey</Badge>
             <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">アンケート</h2>
             <p className="text-xl leading-9 text-slate-600">
               対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
@@ -1364,8 +1470,7 @@ function SurveyForm({
         </div>
 
         <LikertQuestion
-          label={currentQuestion.label(stimulus)}
-          description={currentQuestion.description(stimulus)}
+          prompt={currentQuestion.prompt(stimulus)}
           lowLabel={currentQuestion.lowLabel}
           highLabel={currentQuestion.highLabel}
           value={currentValue}
@@ -1386,6 +1491,222 @@ function SurveyForm({
         </div>
       </div>
     </CardShell>
+  );
+}
+
+function BackgroundSurveyForm({
+  onSubmit,
+}: {
+  onSubmit: (response: BackgroundSurveyResponse) => void;
+}) {
+  const [japaneseNative, setJapaneseNative] = useState<BackgroundSurveyResponse['japaneseNative'] | ''>('');
+  const [japaneseLearningPeriod, setJapaneseLearningPeriod] = useState('');
+  const [japaneseCertification, setJapaneseCertification] = useState('');
+  const [englishProficiency, setEnglishProficiency] = useState('');
+  const [selectedOtherLanguages, setSelectedOtherLanguages] = useState<string[]>([]);
+  const [otherLanguageDetail, setOtherLanguageDetail] = useState('');
+
+  const trimmedLearningPeriod = japaneseLearningPeriod.trim();
+  const trimmedCertification = japaneseCertification.trim();
+  const trimmedEnglish = englishProficiency.trim();
+  const trimmedOtherLanguageDetail = otherLanguageDetail.trim();
+  const needsOtherLanguageDetail = selectedOtherLanguages.includes('その他');
+  const canSubmit =
+    japaneseNative !== '' &&
+    (japaneseNative === 'yes' || trimmedLearningPeriod.length > 0) &&
+    (japaneseNative === 'yes' || trimmedCertification.length > 0) &&
+    trimmedEnglish.length > 0 &&
+    (!needsOtherLanguageDetail || trimmedOtherLanguageDetail.length > 0);
+
+  function toggleOtherLanguage(language: string) {
+    setSelectedOtherLanguages((prev) => (
+      prev.includes(language)
+        ? prev.filter((item) => item !== language)
+        : [...prev, language]
+    ));
+  }
+
+  function formatOtherLanguages() {
+    const selected = selectedOtherLanguages.filter((language) => language !== 'その他');
+    if (needsOtherLanguageDetail) {
+      selected.push(`その他: ${trimmedOtherLanguageDetail}`);
+    }
+    return selected.length > 0 ? selected.join('; ') : 'なし';
+  }
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (japaneseNative === '' || !canSubmit) {
+      alert('未回答の項目があります。');
+      return;
+    }
+
+    onSubmit({
+      japaneseNative,
+      japaneseLearningPeriod: japaneseNative === 'yes' ? '母語' : trimmedLearningPeriod,
+      japaneseCertification: japaneseNative === 'yes' ? '母語のため該当なし' : trimmedCertification,
+      englishProficiency: trimmedEnglish,
+      otherLanguages: formatOtherLanguages(),
+    });
+  }
+
+  return (
+    <CardShell className="max-w-6xl">
+      <form className="space-y-8" onSubmit={submit}>
+        <div className="space-y-3">
+          <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">背景アンケート</h2>
+          <p className="text-xl leading-9 text-slate-600">
+            最後に、言語背景について回答してください。
+          </p>
+        </div>
+
+        <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <fieldset className="space-y-4">
+            <legend className="text-2xl font-semibold text-slate-900">日本語は母語ですか</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ChoiceButton
+                selected={japaneseNative === 'yes'}
+                onClick={() => setJapaneseNative('yes')}
+              >
+                はい
+              </ChoiceButton>
+              <ChoiceButton
+                selected={japaneseNative === 'no'}
+                onClick={() => setJapaneseNative('no')}
+              >
+                いいえ
+              </ChoiceButton>
+            </div>
+          </fieldset>
+
+          {japaneseNative === 'no' && (
+            <>
+              <LabeledTextInput
+                label="日本語の学習期間"
+                value={japaneseLearningPeriod}
+                onChange={setJapaneseLearningPeriod}
+                placeholder="例: 3年、6か月"
+              />
+
+              <LabeledTextInput
+                label="日本語の資格・試験"
+                value={japaneseCertification}
+                onChange={setJapaneseCertification}
+                placeholder="例: JLPT N1、J.TEST 700点、なし"
+              />
+            </>
+          )}
+
+          <LabeledTextInput
+            label="英語能力・試験"
+            value={englishProficiency}
+            onChange={setEnglishProficiency}
+            placeholder="例: TOEIC 800点、TOEFL iBT 90、IELTS 6.5、英検準1級、なし"
+          />
+
+          <fieldset className="space-y-4">
+            <legend className="text-2xl font-semibold text-slate-900">その他に使用できる言語</legend>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {OTHER_LANGUAGE_OPTIONS.map((language) => (
+                <MultiChoiceButton
+                  key={language}
+                  selected={selectedOtherLanguages.includes(language)}
+                  onClick={() => toggleOtherLanguage(language)}
+                >
+                  {language}
+                </MultiChoiceButton>
+              ))}
+            </div>
+          </fieldset>
+
+          {needsOtherLanguageDetail && (
+            <LabeledTextInput
+              label="その他の言語"
+              value={otherLanguageDetail}
+              onChange={setOtherLanguageDetail}
+              placeholder="例: イタリア語、ベトナム語"
+            />
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <PrimaryButton disabled={!canSubmit} onClick={() => undefined}>
+            回答を送信する
+          </PrimaryButton>
+        </div>
+      </form>
+    </CardShell>
+  );
+}
+
+function ChoiceButton({
+  children,
+  selected,
+  onClick,
+}: {
+  children: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-16 rounded-2xl border px-6 py-4 text-xl font-semibold transition ${selected
+        ? 'border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
+        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+        }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MultiChoiceButton({
+  children,
+  selected,
+  onClick,
+}: {
+  children: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-14 items-center justify-center rounded-2xl border px-4 py-3 text-lg font-semibold transition ${selected
+        ? 'border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
+        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+        }`}
+      aria-pressed={selected}
+    >
+      {children}
+    </button>
+  );
+}
+
+function LabeledTextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="block space-y-2">
+      <span className="text-2xl font-semibold text-slate-900">{label}</span>
+      <input
+        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+    </label>
   );
 }
 
@@ -1511,16 +1832,14 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 }
 
 function LikertQuestion({
-  label,
-  description,
+  prompt,
   lowLabel,
   highLabel,
   value,
   onChange,
   disabled = false,
 }: {
-  label: string;
-  description: string;
+  prompt: string;
   lowLabel: string;
   highLabel: string;
   value: number | null;
@@ -1529,10 +1848,7 @@ function LikertQuestion({
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <div className="space-y-4">
-        <h3 className="text-3xl font-semibold leading-tight text-slate-900">{label}</h3>
-        <p className="text-xl leading-9 text-slate-600">{description}</p>
-      </div>
+      <h3 className="text-3xl font-semibold leading-tight text-slate-900">{prompt}</h3>
 
       <div className="mt-8 grid grid-cols-5 gap-2 sm:gap-3">
         {likertOptions().map((n) => (
