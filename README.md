@@ -8,13 +8,14 @@ This project supports a simple experiment flow:
 
 1. Enter a participant `Subject ID`.
 2. Allow microphone access and optionally choose an input device.
-3. Read the experiment instructions.
-4. Confirm that the participant understands the instructions before practice, with an option to review them again.
-5. Complete 5 practice trials using the same flow as the main trials.
-6. Confirm that the participant is ready for the main trials, with an option to repeat the 5 practice trials.
-7. Complete the main trials in randomized order.
-8. Complete a final background questionnaire about Japanese and English language experience.
-9. Download the results JSON, CSV files, and all recorded audio files.
+3. Confirm consent for experiment participation and audio recording.
+4. Read the experiment instructions.
+5. Confirm that the participant understands the instructions before practice, with an option to review them again.
+6. Complete 5 practice trials using the same flow as the main trials.
+7. Confirm that the participant is ready for the main trials, with an option to repeat the 5 practice trials.
+8. Complete the main trials in randomized order.
+9. Complete a final background questionnaire about Japanese and English language experience.
+10. Download the results JSON, CSV files, and all recorded audio files.
 
 Each trial contains:
 

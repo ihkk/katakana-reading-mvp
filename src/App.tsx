@@ -6,12 +6,13 @@ import illustrationStep3 from './assets/illustration_step3.png';
 /**
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
- * setup -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
+ * setup -> consent -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
  * Loop: ready -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
 type Phase =
   | 'setup'
+  | 'consent'
   | 'instructions'
   | 'practiceConfirmation'
   | 'ready'
@@ -78,6 +79,11 @@ type ExperimentMeta = {
   subjectId: string;
   startTimeIso: string;
   endTimeIso?: string;
+  consent: {
+    participation: true;
+    audioRecording: true;
+    consentTimeIso: string;
+  };
   audioMimeChosen?: string;
   mainStimulusOrder: string[];
   practiceStimulusOrder: string[];
@@ -113,10 +119,10 @@ type ZipFileInput = {
 // practice stimuli
 const PRACTICE_STIMULI: StimulusItem[] = [
   { id: 'p001', text: 'パソコン' },
-  // { id: 'p002', text: 'てれび' },
-  // { id: 'p003', text: 'ラジオ' },
-  // { id: 'p004', text: 'おやつ' },
-  // { id: 'p005', text: 'カメラ' },
+  { id: 'p002', text: 'てれび' },
+  { id: 'p003', text: 'ラジオ' },
+  { id: 'p004', text: 'おやつ' },
+  { id: 'p005', text: 'カメラ' },
 ];
 
 // formal stimuli
@@ -132,7 +138,7 @@ const MAIN_STIMULI: StimulusItem[] = [
   // { id: 'w009', text: 'スーパーマーケット' },
   // { id: 'w010', text: 'のうりんぎょぎょう' },
   // { id: 'w011', text: 'リハビリテーション' },
-  // { id: 'w012', text: 'こみゅにけーしょん' },
+  // { id: 'w012', text: 'にゅうしゅつりょく' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -168,6 +174,7 @@ function getPracticeType(mode: ExperimentMode, trialIndex: number): PracticeType
 function getPhaseDisplayLabel(phase: Phase) {
   const labels: Record<Phase, string> = {
     setup: '準備',
+    consent: '同意確認',
     instructions: '説明',
     practiceConfirmation: '練習前',
     ready: '開始前',
@@ -353,8 +360,8 @@ function getStimulusTextSizeClass(text: string) {
 
   if (length <= 4) return 'text-6xl sm:text-8xl lg:text-9xl';
   if (length <= 7) return 'text-5xl sm:text-7xl lg:text-8xl';
-  if (length <= 10) return 'text-4xl sm:text-6xl lg:text-7xl';
-  return 'text-3xl sm:text-5xl lg:text-6xl';
+  if (length <= 10) return 'text-5xl sm:text-6xl lg:text-7xl';
+  return 'text-4xl sm:text-5xl lg:text-6xl';
 }
 
 type SurveyQuestion = {
@@ -449,6 +456,9 @@ function App() {
   const [phase, setPhase] = useState<Phase>('setup');
   const [mode, setMode] = useState<ExperimentMode>('practice');
   const [subjectId, setSubjectId] = useState('');
+  const [participationConsent, setParticipationConsent] = useState(false);
+  const [recordingConsent, setRecordingConsent] = useState(false);
+  const [withdrawalConsent, setWithdrawalConsent] = useState(false);
   const [instructionPageIndex, setInstructionPageIndex] = useState(0);
   const [instructionReturnTarget, setInstructionReturnTarget] = useState<InstructionReturnTarget>(null);
 
@@ -549,10 +559,28 @@ function App() {
       return;
     }
 
+    setParticipationConsent(false);
+    setRecordingConsent(false);
+    setWithdrawalConsent(false);
+    setPhase('consent');
+  }
+
+  function beginInstructionsAfterConsent() {
+    if (!participationConsent || !recordingConsent || !withdrawalConsent) {
+      alert('同意確認の項目をすべて確認してください。');
+      return;
+    }
+
     const chosen = pickBestAudioMimeType();
+    const now = new Date().toISOString();
     setMeta({
       subjectId: subjectId.trim(),
-      startTimeIso: new Date().toISOString(),
+      startTimeIso: now,
+      consent: {
+        participation: true,
+        audioRecording: true,
+        consentTimeIso: now,
+      },
       audioMimeChosen: chosen.mimeType,
       mainStimulusOrder: orderedMainStimuli.map((s) => s.id),
       practiceStimulusOrder: orderedPracticeStimuli.map((s) => s.id),
@@ -1016,10 +1044,10 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300">
       <BackgroundGlow />
-      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
 
         {/* TopBar 只有在非 setup 且非说明页面显示 */}
-        {phase !== 'setup' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
+        {phase !== 'setup' && phase !== 'consent' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
           <TopBar
             subjectId={subjectId}
             phase={phase}
@@ -1033,22 +1061,22 @@ function App() {
         <main className="flex flex-1 items-center justify-center py-4 sm:py-6">
 
           {phase === 'setup' && (
-            <CardShell className="max-w-6xl">
+            <CardShell className="max-w-7xl">
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>単語読み上げ予備実験
                   </Badge>
-                  <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験の準備</h1>
-                  <p className="max-w-6xl text-lg leading-8 text-slate-600">
+                  <h1 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験の準備</h1>
+                  <p className="max-w-7xl text-2xl leading-9 text-slate-600">
                     被験者情報を入力します。マイク権限は自動で確認されます。
                   </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-[1.2fr_0.8fr]">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <label className="mb-2 block text-lg font-medium text-slate-700">Subject ID</label>
+                    <label className="mb-2 block text-2xl font-medium text-slate-700">Subject ID</label>
                     <input
-                      className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-2xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                       value={subjectId}
                       onChange={(e) => setSubjectId(e.target.value)}
                       placeholder="例: S001"
@@ -1056,9 +1084,9 @@ function App() {
 
                     {audioDevices.length > 0 && (
                       <div className="mt-5">
-                        <label className="mb-2 block text-lg font-medium text-slate-700">マイクを選択</label>
+                        <label className="mb-2 block text-2xl font-medium text-slate-700">マイクを選択</label>
                         <select
-                          className="w-full appearance-none rounded-2xl border border-slate-300 bg-white px-5 py-4 text-lg text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                          className="w-full appearance-none rounded-2xl border border-slate-300 bg-white px-5 py-4 text-2xl text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                           value={selectedDeviceId}
                           onChange={(e) => switchMicrophone(e.target.value)}
                         >
@@ -1072,21 +1100,21 @@ function App() {
                     )}
 
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <PrimaryButton onClick={startExperiment}>説明へ進む</PrimaryButton>
+                      <PrimaryButton onClick={startExperiment}>同意確認へ進む</PrimaryButton>
                       <SecondaryButton onClick={requestMic}>マイク権限を再確認</SecondaryButton>
                     </div>
                   </div>
 
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="space-y-4 text-base">
+                    <div className="space-y-4 text-2xl">
                       <StatusRow label="マイク状態" value={streamReady ? '準備完了' : '未許可'} success={streamReady} />
                       <StatusRow label="録音形式" value={pickBestAudioMimeType().mimeType || 'browser default'} />
                       {permissionError ? (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-lg leading-8 text-rose-700">
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-2xl leading-9 text-rose-700">
                           {permissionError}
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-lg leading-8 text-emerald-700">
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-2xl leading-9 text-emerald-700">
                           ページを開くと、ブラウザがマイク権限を確認します。
                         </div>
                       )}
@@ -1097,12 +1125,77 @@ function App() {
             </CardShell>
           )}
 
+          {phase === 'consent' && (
+            <CardShell className="max-w-7xl">
+              <div className="space-y-8">
+                <div className="space-y-3">
+                  <Badge>Consent Form</Badge>
+                  <h1 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験参加と録音の同意確認</h1>
+                  <p className="max-w-6xl text-2xl leading-9 text-slate-600">
+                    実験の内容と録音について確認し、同意する場合のみ次へ進んでください。
+                  </p>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 className="text-3xl font-semibold text-slate-900">確認事項</h2>
+                    <div className="mt-5 space-y-4 text-2xl leading-9 text-slate-700">
+                      <p>
+                        この実験では、画面に表示される単語を声に出して読み、そのあと同じ単語について意味の説明または例文を声で答えていただきます。
+                      </p>
+                      <p>
+                        単語の読み上げと、意味や例文を答える声は録音されます。回答データと録音データは、研究目的で保存・分析します。
+                      </p>
+                    </div>
+                    <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-2xl leading-9 text-amber-900">
+                      内容を確認し、同意できる場合のみ次へ進んでください。
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <ConsentCheck
+                      checked={participationConsent}
+                      onChange={setParticipationConsent}
+                      title="実験参加への同意"
+                    >
+                      実験の内容を確認し、参加することに同意します。
+                    </ConsentCheck>
+                    <ConsentCheck
+                      checked={recordingConsent}
+                      onChange={setRecordingConsent}
+                      title="録音への同意"
+                    >
+                      単語の読み上げと、意味や例文を答える声を録音することに同意します。
+                    </ConsentCheck>
+                    <ConsentCheck
+                      checked={withdrawalConsent}
+                      onChange={setWithdrawalConsent}
+                      title="参加の任意性と同意撤回の確認"
+                    >
+                      参加は任意であり、参加しない場合や同意を撤回する場合でも不利益はありません。撤回時は可能な範囲で記録とデータを破棄しますが、匿名化後や解析後は個別に破棄できない場合があります。
+                    </ConsentCheck>
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                  <SecondaryButton onClick={() => setPhase('setup')}>戻る</SecondaryButton>
+                  <PrimaryButton
+                    onClick={beginInstructionsAfterConsent}
+                    disabled={!participationConsent || !recordingConsent || !withdrawalConsent}
+                  >
+                    同意して説明へ進む
+                  </PrimaryButton>
+                </div>
+              </div>
+            </CardShell>
+          )}
+
           {phase === 'instructions' && (
-            <CardShell className="max-w-6xl">
+            <CardShell className="max-w-7xl">
               <div className="space-y-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <Badge>Instructions</Badge>
-                  <div className="text-lg font-semibold text-slate-500">
+                  <div className="text-2xl font-semibold text-slate-500">
                     {instructionPageIndex + 1} / {INSTRUCTION_PAGES.length}
                   </div>
                 </div>
@@ -1112,24 +1205,24 @@ function App() {
                     <InstructionIllustration type={instructionPage.visual} />
 
                     <div className="space-y-8">
-                      <div className="inline-flex rounded-full bg-sky-50 px-4 py-2 text-lg font-semibold text-sky-700">
+                      <div className="inline-flex rounded-full bg-sky-50 px-4 py-2 text-2xl font-semibold text-sky-700">
                         {instructionPage.badge}
                       </div>
                       <div className="space-y-5">
-                        <h2 className="text-4xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+                        <h2 className="text-5xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-5xl">
                           {instructionPage.title}
                         </h2>
-                        <p className="text-2xl leading-10 text-slate-700">
+                        <p className="text-3xl leading-10 text-slate-700">
                           {instructionPage.body}
                         </p>
                       </div>
                       {instructionPage.note && (
-                        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-xl leading-9 text-sky-800">
+                        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-4 text-2xl leading-9 text-sky-800">
                           {instructionPage.note}
                         </div>
                       )}
                       {instructionPage.warning && (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-xl leading-9 text-rose-800">
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-2xl font-semibold leading-9 text-rose-900">
                           {instructionPage.warning}
                         </div>
                       )}
@@ -1170,14 +1263,14 @@ function App() {
           )}
 
           {phase === 'practiceConfirmation' && (
-            <CardShell className="max-w-6xl text-center">
+            <CardShell className="max-w-7xl text-center">
               <div className="space-y-8">
                 <Badge>練習前確認</Badge>
                 <div className="space-y-4">
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                     操作方法はわかりましたか
                   </h2>
-                  <p className="text-xl leading-9 text-slate-600">
+                  <p className="text-4xl font-medium leading-10 text-slate-700">
                     不明な点があれば、説明をもう一度確認できます。<br />
                     準備ができたら練習を始めてください。
                   </p>
@@ -1193,13 +1286,13 @@ function App() {
           )}
 
           {phase === 'ready' && (
-            <CardShell className="max-w-6xl text-center">
+            <CardShell className="max-w-7xl text-center">
               <div className="space-y-8">
                 <div className="space-y-4">
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                     準備ができたら開始してください
                   </h2>
-                  <p className="text-xl leading-9 text-slate-600">
+                  <p className="text-4xl font-medium leading-10 text-slate-700">
                     ボタンを押すとカウントダウンが始まり、そのあと単語が表示されます。
                   </p>
                 </div>
@@ -1211,14 +1304,14 @@ function App() {
           )}
 
           {phase === 'countdown' && (
-            <CardShell className="max-w-6xl text-center">
+            <CardShell className="max-w-7xl text-center">
               <div className="space-y-10">
                 <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-9xl font-semibold text-sky-600 shadow-xl shadow-sky-100 sm:h-72 sm:w-72">
                   {countdown}
                 </div>
                 <div className="space-y-3">
-                  <h2 className="text-4xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
-                  <p className="text-2xl font-semibold text-slate-600">
+                  <h2 className="text-5xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
+                  <p className="text-3xl font-semibold text-slate-600">
                     読む → Space
                   </p>
                 </div>
@@ -1227,7 +1320,7 @@ function App() {
           )}
 
           {phase === 'recording' && (
-            <CardShell className="max-w-6xl text-center">
+            <CardShell className="max-w-7xl text-center">
               <div className="space-y-12">
                 <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-14 shadow-xl shadow-slate-200/50 sm:px-10 sm:py-16">
                   {/* <div className="mx-auto mb-6 flex h-3 w-3 rounded-full bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.6)]" /> */}
@@ -1237,9 +1330,9 @@ function App() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-3xl font-medium text-slate-900">読み上げてください</p>
-                  <p className="text-xl leading-9 text-slate-600">
-                    読み終わったら <span className="rounded-xl bg-slate-100 px-3 py-1.5 text-slate-700 border border-slate-200">Space</span> キーを押してください。
+                  <p className="text-4xl font-medium text-slate-900">読み上げてください</p>
+                  <p className="text-4xl font-medium leading-10 text-slate-700">
+                    読み終わったら <span className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-slate-800">Space</span> キーを押してください。
                   </p>
                 </div>
               </div>
@@ -1247,18 +1340,18 @@ function App() {
           )}
 
           {phase === 'meaningRecording' && (
-            <CardShell className="max-w-6xl">
+            <CardShell className="max-w-7xl">
               <div className="space-y-8 text-center">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="mx-auto inline-flex flex-col items-center gap-2 rounded-3xl border border-sky-200 bg-sky-50 px-8 py-5 font-semibold text-slate-900 shadow-sm">
-                    <span className="text-xl text-sky-700 sm:text-2xl">対象語</span>
-                    <span className="text-4xl sm:text-5xl">{currentStimulus.text}</span>
+                  <div className="mx-auto inline-flex w-full max-w-5xl flex-col items-center gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-8 py-6 font-semibold text-slate-900 shadow-sm">
+                    <span className="text-3xl text-sky-700 sm:text-4xl">対象語</span>
+                    <span className={`whitespace-nowrap leading-none ${getStimulusTextSizeClass(currentStimulus.text)}`}>{currentStimulus.text}</span>
                   </div>
-                  <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">意味や例文を声で答えてください</h2>
+                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl lg:text-5xl">意味や例文を声で答えてください</h2>
                 </div>
 
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
-                  <div className="text-2xl leading-10 text-slate-700">
+                  <div className="text-4xl font-medium leading-10 text-slate-700">
                     <p>終わったら Space キーを押してください。</p>
                   </div>
                 </div>
@@ -1275,14 +1368,14 @@ function App() {
           )}
 
           {phase === 'intermission' && (
-            <CardShell className="max-w-6xl text-center">
+            <CardShell className="max-w-7xl text-center">
               <div className="space-y-8">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-4xl">
                   🎉
                 </div>
                 <div className="space-y-3">
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">練習が完了しました</h2>
-                  <p className="text-xl leading-9 text-slate-600">
+                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">練習が完了しました</h2>
+                  <p className="text-2xl leading-9 text-slate-600">
                     実験の流れは掴めましたでしょうか？<br />
                     ここから本番が始まります。準備ができたら開始ボタンを押してください。
                   </p>
@@ -1298,15 +1391,15 @@ function App() {
           )}
 
           {phase === 'done' && (
-            <CardShell className="max-w-6xl">
+            <CardShell className="max-w-7xl">
               <div className="space-y-8">
                 <div className="space-y-3">
                   <Badge>Completed</Badge>
                   <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-6xl">実験は以上です</h2>
-                  <p className="text-3xl font-semibold leading-10 text-slate-900 sm:text-4xl">
+                  <p className="text-4xl font-semibold leading-10 text-slate-900 sm:text-5xl">
                     ご協力いただき、誠にありがとうございました。
                   </p>
-                  <p className="text-xl leading-9 text-slate-600">
+                  <p className="text-2xl leading-9 text-slate-600">
                     すべての回答が保存されました。実験者がデータを保存しますので、少々お待ちください。
                   </p>
                 </div>
@@ -1349,14 +1442,14 @@ function InstructionIllustration({ type }: { type: InstructionVisualType }) {
           <div className="grid grid-cols-3 gap-3">
             {['読む', '答える', '選ぶ'].map((label, index) => (
               <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center">
-                <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 text-lg font-semibold text-white">
+                <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-amber-400 text-2xl font-semibold text-white">
                   {index + 1}
                 </div>
-                <div className="text-lg font-semibold text-slate-800">{label}</div>
+                <div className="text-2xl font-semibold text-slate-800">{label}</div>
               </div>
             ))}
           </div>
-          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-center text-xl font-semibold leading-8 text-amber-900">
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-center text-2xl font-semibold leading-8 text-amber-900">
             本番前に練習します
           </div>
         </div>
@@ -1446,27 +1539,18 @@ function SurveyForm({
   }
 
   return (
-    <CardShell className="max-w-6xl">
+    <CardShell className="max-w-7xl">
       <div className="space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3">
-            <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">アンケート</h2>
-            <p className="text-xl leading-9 text-slate-600">
+            <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">アンケート</h2>
+            <p className="text-2xl leading-9 text-slate-600">
               対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-semibold text-slate-600">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-2xl font-semibold text-slate-600">
             {questionIndex + 1} / {SURVEY_QUESTIONS.length}
           </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-3" aria-label="質問の進捗">
-          {SURVEY_QUESTIONS.map((question, index) => (
-            <div
-              key={question.key}
-              className={`h-3 rounded-full transition ${index <= questionIndex ? 'bg-sky-500' : 'bg-slate-200'}`}
-            />
-          ))}
         </div>
 
         <LikertQuestion
@@ -1485,7 +1569,7 @@ function SurveyForm({
           >
             戻る
           </SecondaryButton>
-          <p className="text-lg leading-8 text-slate-500">
+          <p className="text-2xl leading-9 text-slate-500">
             {isLastQuestion ? '数字を選ぶと次の単語に進みます。' : '数字を選ぶと次の質問に進みます。'}
           </p>
         </div>
@@ -1551,18 +1635,18 @@ function BackgroundSurveyForm({
   }
 
   return (
-    <CardShell className="max-w-6xl">
+    <CardShell className="max-w-7xl">
       <form className="space-y-8" onSubmit={submit}>
         <div className="space-y-3">
-          <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">背景アンケート</h2>
-          <p className="text-xl leading-9 text-slate-600">
+          <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">背景アンケート</h2>
+          <p className="text-2xl leading-9 text-slate-600">
             最後に、言語背景について回答してください。
           </p>
         </div>
 
         <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <fieldset className="space-y-4">
-            <legend className="text-2xl font-semibold text-slate-900">日本語は母語ですか</legend>
+            <legend className="text-3xl font-semibold text-slate-900">日本語は母語ですか</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               <ChoiceButton
                 selected={japaneseNative === 'yes'}
@@ -1605,7 +1689,7 @@ function BackgroundSurveyForm({
           />
 
           <fieldset className="space-y-4">
-            <legend className="text-2xl font-semibold text-slate-900">その他に使用できる言語</legend>
+            <legend className="text-3xl font-semibold text-slate-900">その他に使用できる言語</legend>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {OTHER_LANGUAGE_OPTIONS.map((language) => (
                 <MultiChoiceButton
@@ -1652,13 +1736,43 @@ function ChoiceButton({
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-16 rounded-2xl border px-6 py-4 text-xl font-semibold transition ${selected
+      className={`min-h-16 rounded-2xl border px-6 py-4 text-2xl font-semibold transition ${selected
         ? 'border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
         }`}
     >
       {children}
     </button>
+  );
+}
+
+function ConsentCheck({
+  title,
+  children,
+  checked,
+  onChange,
+}: {
+  title: string;
+  children: React.ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={`flex min-h-32 cursor-pointer items-center gap-4 rounded-3xl border px-5 py-4 shadow-sm transition ${checked
+      ? 'border-sky-300 bg-sky-50'
+      : 'border-slate-200 bg-white hover:border-slate-300'
+      }`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-7 w-7 shrink-0 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+      />
+      <span className="space-y-1.5">
+        <span className="block text-2xl font-semibold text-slate-900">{title}</span>
+        <span className="block text-2xl leading-8 text-slate-700">{children}</span>
+      </span>
+    </label>
   );
 }
 
@@ -1675,7 +1789,7 @@ function MultiChoiceButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-14 items-center justify-center rounded-2xl border px-4 py-3 text-lg font-semibold transition ${selected
+      className={`flex min-h-14 items-center justify-center rounded-2xl border px-4 py-3 text-2xl font-semibold transition ${selected
         ? 'border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
         }`}
@@ -1699,9 +1813,9 @@ function LabeledTextInput({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-2xl font-semibold text-slate-900">{label}</span>
+      <span className="text-3xl font-semibold text-slate-900">{label}</span>
       <input
-        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-2xl text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1732,8 +1846,8 @@ function TopBar({
       <div className="rounded-[1.75rem] border border-slate-200 bg-white/80 px-4 py-4 shadow-sm backdrop-blur-xl sm:px-6">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-slate-500">Experiment Panel - {modeLabel}</div>
-            <div className="mt-1 text-sm font-medium text-slate-700">
+            <div className="text-base uppercase tracking-[0.2em] text-slate-500">Experiment Panel - {modeLabel}</div>
+            <div className="mt-1 text-2xl font-medium text-slate-700">
               {subjectId ? `Subject: ${subjectId}` : 'Subject ID not set'}
             </div>
           </div>
@@ -1771,7 +1885,7 @@ function PrimaryButton({ children, onClick, disabled = false }: { children: Reac
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl px-6 py-4 text-lg font-medium transition ${disabled
+      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl px-6 py-4 text-2xl font-medium transition ${disabled
         ? 'cursor-not-allowed bg-slate-100 text-slate-400'
         : 'bg-slate-900 text-white shadow-md hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-lg active:translate-y-0'
         }`}
@@ -1786,7 +1900,7 @@ function SecondaryButton({ children, onClick, disabled = false }: { children: Re
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl border px-6 py-4 text-lg font-medium transition ${disabled
+      className={`inline-flex min-h-14 items-center justify-center whitespace-nowrap rounded-2xl border px-6 py-4 text-2xl font-medium transition ${disabled
         ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400'
         : 'border-slate-300 bg-white text-slate-700 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-sm active:translate-y-0'
         }`}
@@ -1798,7 +1912,7 @@ function SecondaryButton({ children, onClick, disabled = false }: { children: Re
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <div className="inline-flex w-fit items-center rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
+    <div className="inline-flex w-fit items-center rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-2xl font-semibold uppercase tracking-[0.18em] text-sky-700">
       {children}
     </div>
   );
@@ -1806,7 +1920,7 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 function MiniPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-2xl text-slate-600">
       <span className="text-slate-500">{label}</span>
       <span className="ml-2 font-semibold text-slate-800">{value}</span>
     </div>
@@ -1825,8 +1939,8 @@ function StatusRow({ label, value, success = false }: { label: string; value: st
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-lg font-medium text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
+      <div className="text-2xl font-medium text-slate-500">{label}</div>
+      <div className="mt-2 text-4xl font-bold text-slate-900">{value}</div>
     </div>
   );
 }
@@ -1848,15 +1962,20 @@ function LikertQuestion({
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h3 className="text-3xl font-semibold leading-tight text-slate-900">{prompt}</h3>
+      <h3 className="text-4xl font-semibold leading-tight text-slate-900">{prompt}</h3>
 
-      <div className="mt-8 grid grid-cols-5 gap-2 sm:gap-3">
+      <div className="mt-6 flex items-stretch justify-between gap-4 text-2xl font-semibold text-slate-800">
+        <span className="flex min-h-14 max-w-[45%] items-center rounded-2xl bg-slate-100 px-4 py-3 text-left leading-7">{lowLabel}</span>
+        <span className="flex min-h-14 max-w-[45%] items-center justify-end rounded-2xl bg-slate-100 px-4 py-3 text-right leading-7">{highLabel}</span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-5 gap-2 sm:gap-3">
         {likertOptions().map((n) => (
           <button
             key={n}
             onClick={() => onChange(n)}
             disabled={disabled}
-            className={`min-h-16 rounded-2xl border px-0 py-3 text-2xl font-semibold transition duration-150 ${value === n
+            className={`min-h-16 rounded-2xl border px-0 py-3 text-3xl font-semibold transition duration-150 ${value === n
               ? 'scale-105 border-sky-500 bg-sky-500 text-white shadow-lg shadow-sky-200'
               : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
@@ -1864,10 +1983,6 @@ function LikertQuestion({
             {n}
           </button>
         ))}
-      </div>
-      <div className="mt-5 flex items-stretch justify-between gap-4 text-lg font-semibold text-slate-800">
-        <span className="flex min-h-14 max-w-[45%] items-center rounded-2xl bg-slate-100 px-4 py-3 text-left leading-7">{lowLabel}</span>
-        <span className="flex min-h-14 max-w-[45%] items-center justify-end rounded-2xl bg-slate-100 px-4 py-3 text-right leading-7">{highLabel}</span>
       </div>
     </section>
   );
