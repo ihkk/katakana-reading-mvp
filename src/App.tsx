@@ -121,8 +121,6 @@ const PRACTICE_STIMULI: StimulusItem[] = [
   { id: 'p001', text: 'パソコン' },
   { id: 'p002', text: 'てれび' },
   { id: 'p003', text: 'ラジオ' },
-  { id: 'p004', text: 'おやつ' },
-  { id: 'p005', text: 'カメラ' },
 ];
 
 // formal stimuli
@@ -169,25 +167,6 @@ function getPracticeType(mode: ExperimentMode, trialIndex: number): PracticeType
   void trialIndex;
   if (mode !== 'practice') return 'none';
   return 'normal';
-}
-
-function getPhaseDisplayLabel(phase: Phase) {
-  const labels: Record<Phase, string> = {
-    setup: '準備',
-    consent: '同意確認',
-    instructions: '説明',
-    practiceConfirmation: '練習前',
-    ready: '開始前',
-    countdown: '準備中',
-    recording: '読み上げ',
-    meaningRecording: '音声回答',
-    survey: 'アンケート',
-    intermission: '本番前',
-    backgroundSurvey: '背景アンケート',
-    done: '完了',
-  };
-
-  return labels[phase];
 }
 
 function pickBestAudioMimeType(): { mimeType: string; ext: string } {
@@ -385,7 +364,7 @@ type InstructionPage = {
 const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     key: 'familiarity',
-    prompt: (stimulus) => `「${stimulus}」という単語について、見覚えや聞き覚えはどのくらいありますか`,
+    prompt: (stimulus) => `「${stimulus}」という単語について、見覚えや聞き覚えはどのくらい\nありますか`,
     lowLabel: 'まったく見覚えがない',
     highLabel: 'よく知っている単語だと感じる',
   },
@@ -397,13 +376,13 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
   },
   {
     key: 'exposureFreq',
-    prompt: (stimulus) => `普段、会話・授業・メディア・インターネットなどで「${stimulus}」という単語をどのくらい見たり聞いたりしますか`,
+    prompt: (stimulus) => `普段、会話・授業・メディア・インターネットなどで\n「${stimulus}」という単語をどのくらい見たり聞いたりしますか`,
     lowLabel: 'ほとんどない',
     highLabel: 'とてもよくある',
   },
   {
     key: 'useFreq',
-    prompt: (stimulus) => `普段、話す・書く・入力する場面で、自分から「${stimulus}」という単語をどのくらい使いますか`,
+    prompt: (stimulus) => `普段、話す・書く・入力する場面で、「${stimulus}」という単語を\nどのくらい使いますか`,
     lowLabel: 'ほとんど使わない',
     highLabel: 'とてもよく使う',
   },
@@ -444,7 +423,7 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Practice',
     title: 'まずは練習から始めます',
-    body: '本番の前に、同じ流れで5回練習します。操作に慣れてから本番に進みます。',
+    body: '本番の前に、同じ流れで3回練習します。操作に慣れてから本番に進みます。',
     visual: 'practice',
   },
 ];
@@ -488,7 +467,7 @@ function App() {
 
   const currentResults = mode === 'practice' ? practiceResults : mainResults;
   const completedTrials = currentResults.length;
-  const progressPercent = (completedTrials / activeStimuli.length) * 100;
+  const progressPercent = Math.min((completedTrials / activeStimuli.length) * 100, 100);
 
   async function requestMic() {
     try {
@@ -598,6 +577,14 @@ function App() {
     setMode('practice');
     setCurrentTrialIndex(0);
     setPracticeResults([]);
+    setCountdown(3);
+    setPhase('ready');
+  }
+
+  function repeatFinalPracticeTrial() {
+    setInstructionReturnTarget(null);
+    setMode('practice');
+    setCurrentTrialIndex(Math.max(orderedPracticeStimuli.length - 1, 0));
     setCountdown(3);
     setPhase('ready');
   }
@@ -852,6 +839,10 @@ function App() {
   }
 
   function startCurrentTrial() {
+    setTempReading(null);
+    setTempMeaning(null);
+    setIsMeaningRecording(false);
+    meaningAutoStartKeyRef.current = '';
     setCountdown(3);
     setPhase('countdown');
   }
@@ -1049,11 +1040,7 @@ function App() {
         {/* TopBar 只有在非 setup 且非说明页面显示 */}
         {phase !== 'setup' && phase !== 'consent' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
           <TopBar
-            subjectId={subjectId}
-            phase={phase}
             mode={mode}
-            currentTrialIndex={currentTrialIndex}
-            totalTrials={activeStimuli.length}
             progressPercent={progressPercent}
           />
         )}
@@ -1144,7 +1131,10 @@ function App() {
                         この実験では、画面に表示される単語を声に出して読み、そのあと同じ単語について意味の説明または例文を声で答えていただきます。
                       </p>
                       <p>
-                        単語の読み上げと、意味や例文を答える声は録音されます。回答データと録音データは、研究目的で保存・分析します。
+                        単語の読み上げと、意味や例文を答える声は録音されます。
+                      </p>
+                      <p>
+                        回答データと録音データは、研究目的で保存・分析します。
                       </p>
                     </div>
                     <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-2xl leading-9 text-amber-900">
@@ -1165,7 +1155,7 @@ function App() {
                       onChange={setRecordingConsent}
                       title="録音への同意"
                     >
-                      単語の読み上げと、意味や例文を答える声を録音することに同意します。
+                      録音データを、読み上げ方や回答内容の確認・分析に使用することに同意します。個人の声は、SNS、ウェブサイトなどで公開されません。
                     </ConsentCheck>
                     <ConsentCheck
                       checked={withdrawalConsent}
@@ -1330,7 +1320,7 @@ function App() {
                 </div>
 
                 <div className="space-y-3">
-                  <p className="text-4xl font-medium text-slate-900">読み上げてください</p>
+                  <p className="text-5xl font-semibold text-slate-900">読み上げてください</p>
                   <p className="text-4xl font-medium leading-10 text-slate-700">
                     読み終わったら <span className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-slate-800">Space</span> キーを押してください。
                   </p>
@@ -1340,20 +1330,19 @@ function App() {
           )}
 
           {phase === 'meaningRecording' && (
-            <CardShell className="max-w-7xl">
-              <div className="space-y-8 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="mx-auto inline-flex w-full max-w-5xl flex-col items-center gap-3 rounded-3xl border border-sky-200 bg-sky-50 px-8 py-6 font-semibold text-slate-900 shadow-sm">
-                    <span className="text-3xl text-sky-700 sm:text-4xl">対象語</span>
-                    <span className={`whitespace-nowrap leading-none ${getStimulusTextSizeClass(currentStimulus.text)}`}>{currentStimulus.text}</span>
+            <CardShell className="max-w-7xl text-center">
+              <div className="space-y-12">
+                <div className="rounded-[2rem] border border-sky-200 bg-sky-50 px-6 py-14 shadow-xl shadow-sky-100/70 sm:px-10 sm:py-16">
+                  <div className={`whitespace-nowrap font-semibold leading-none text-slate-900 ${getStimulusTextSizeClass(currentStimulus.text)}`}>
+                    {currentStimulus.text}
                   </div>
-                  <h2 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl lg:text-5xl">意味や例文を声で答えてください</h2>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:px-10">
-                  <div className="text-4xl font-medium leading-10 text-slate-700">
-                    <p>終わったら Space キーを押してください。</p>
-                  </div>
+                <div className="space-y-3">
+                  <p className="text-5xl font-semibold text-slate-900">意味や例文を答えてください</p>
+                  <p className="text-4xl font-medium leading-10 text-slate-700">
+                    答え終わったら <span className="rounded-xl border border-sky-200 bg-sky-100 px-4 py-2 text-sky-900">Space</span> キーを押してください。
+                  </p>
                 </div>
               </div>
             </CardShell>
@@ -1374,15 +1363,15 @@ function App() {
                   🎉
                 </div>
                 <div className="space-y-3">
-                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">練習が完了しました</h2>
-                  <p className="text-2xl leading-9 text-slate-600">
-                    実験の流れは掴めましたでしょうか？<br />
-                    ここから本番が始まります。準備ができたら開始ボタンを押してください。
+                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">操作に慣れましたか</h2>
+                  <p className="text-3xl font-medium leading-10 text-slate-700">
+                    本番に進む準備ができたら、開始してください。<br />
+                    まだ不安がある場合は、最後の練習をもう一度行えます。
                   </p>
                 </div>
                 <div className="flex flex-col-reverse justify-center gap-3 pt-4 sm:flex-row">
-                  <SecondaryButton onClick={beginPractice}>
-                    練習をもう一度行う
+                  <SecondaryButton onClick={repeatFinalPracticeTrial}>
+                    最後の練習をもう一度行う
                   </SecondaryButton>
                   <PrimaryButton onClick={beginMainExperiment}>本番を開始する</PrimaryButton>
                 </div>
@@ -1544,9 +1533,6 @@ function SurveyForm({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-3">
             <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">アンケート</h2>
-            <p className="text-2xl leading-9 text-slate-600">
-              対象語: <span className="font-semibold text-slate-900">{stimulus}</span>
-            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-2xl font-semibold text-slate-600">
             {questionIndex + 1} / {SURVEY_QUESTIONS.length}
@@ -1825,38 +1811,16 @@ function LabeledTextInput({
 }
 
 function TopBar({
-  subjectId,
-  phase,
   mode,
-  currentTrialIndex,
-  totalTrials,
   progressPercent,
 }: {
-  subjectId: string;
-  phase: Phase;
   mode: ExperimentMode;
-  currentTrialIndex: number;
-  totalTrials: number;
   progressPercent: number;
 }) {
-  const modeLabel = mode === 'practice' ? '練習モード' : '本番モード';
-
   return (
     <header className="sticky top-0 z-10 mb-4">
-      <div className="rounded-[1.75rem] border border-slate-200 bg-white/80 px-4 py-4 shadow-sm backdrop-blur-xl sm:px-6">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-base uppercase tracking-[0.2em] text-slate-500">Experiment Panel - {modeLabel}</div>
-            <div className="mt-1 text-2xl font-medium text-slate-700">
-              {subjectId ? `Subject: ${subjectId}` : 'Subject ID not set'}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <MiniPill label="段階" value={getPhaseDisplayLabel(phase)} />
-            <MiniPill label="単語" value={`${Math.min(currentTrialIndex + 1, totalTrials)}/${totalTrials}`} />
-          </div>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="rounded-full border border-slate-200 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-xl sm:px-6">
+        <div className="h-3 overflow-hidden rounded-full bg-slate-100">
           <div
             className={`h-full rounded-full transition-all duration-500 ${mode === 'practice'
               ? 'bg-gradient-to-r from-amber-300 to-orange-400'
@@ -1918,15 +1882,6 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MiniPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-2xl text-slate-600">
-      <span className="text-slate-500">{label}</span>
-      <span className="ml-2 font-semibold text-slate-800">{value}</span>
-    </div>
-  );
-}
-
 function StatusRow({ label, value, success = false }: { label: string; value: string; success?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
@@ -1962,7 +1917,7 @@ function LikertQuestion({
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <h3 className="text-4xl font-semibold leading-tight text-slate-900">{prompt}</h3>
+      <h3 className="whitespace-pre-line text-4xl font-semibold leading-tight text-slate-900">{prompt}</h3>
 
       <div className="mt-6 flex items-stretch justify-between gap-4 text-2xl font-semibold text-slate-800">
         <span className="flex min-h-14 max-w-[45%] items-center rounded-2xl bg-slate-100 px-4 py-3 text-left leading-7">{lowLabel}</span>

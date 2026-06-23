@@ -148,7 +148,7 @@ The exact MIME type is selected from browser-supported WebM options.
 
 Stimuli are currently defined directly in `src/App.tsx`.
 
-- Practice stimuli: 5 items
+- Practice stimuli: 3 items
 - Main stimuli: defined in `MAIN_STIMULI`
 - Main stimuli are shuffled once when the app loads
 - Practice stimuli keep their defined order
