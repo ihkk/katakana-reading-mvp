@@ -404,7 +404,7 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Step 1',
     title: '単語を声に出して読みます',
-    body: '単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに Space キーを押します。',
+    body: '画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに Space キーを押します。',
     warning: '単語の読み上げの声は録音されます。',
     visual: 'reading',
   },
