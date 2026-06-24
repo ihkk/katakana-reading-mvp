@@ -6,12 +6,13 @@ import illustrationStep3 from './assets/illustration_step3.png';
 /**
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
- * setup -> consent -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
+ * setup -> experiment info -> consent -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
  * Loop: ready -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
 type Phase =
   | 'setup'
+  | 'experimentInfo'
   | 'consent'
   | 'instructions'
   | 'practiceConfirmation'
@@ -364,13 +365,13 @@ type InstructionPage = {
 const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     key: 'familiarity',
-    prompt: (stimulus) => `「${stimulus}」という単語について、見覚えや聞き覚えはどのくらい\nありますか`,
+    prompt: (stimulus) => `「${stimulus}」という単語について、\n見覚えや聞き覚えはどのくらいありますか`,
     lowLabel: 'まったく見覚えがない',
     highLabel: 'よく知っている単語だと感じる',
   },
   {
     key: 'confidence',
-    prompt: (stimulus) => `「${stimulus}」という単語の意味の説明や例文作成に、どのくらい自信がありますか`,
+    prompt: (stimulus) => `「${stimulus}」という単語の意味の説明や例文作成に、\nどのくらい自信がありますか`,
     lowLabel: 'まったく自信がない',
     highLabel: 'とても自信がある',
   },
@@ -382,7 +383,7 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
   },
   {
     key: 'useFreq',
-    prompt: (stimulus) => `普段、話す・書く・入力する場面で、「${stimulus}」という単語を\nどのくらい使いますか`,
+    prompt: (stimulus) => `普段、話す・書く・入力する場面で、\n「${stimulus}」という単語をどのくらい使いますか`,
     lowLabel: 'ほとんど使わない',
     highLabel: 'とてもよく使う',
   },
@@ -541,7 +542,7 @@ function App() {
     setParticipationConsent(false);
     setRecordingConsent(false);
     setWithdrawalConsent(false);
-    setPhase('consent');
+    setPhase('experimentInfo');
   }
 
   function beginInstructionsAfterConsent() {
@@ -1038,7 +1039,7 @@ function App() {
       <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
 
         {/* TopBar 只有在非 setup 且非说明页面显示 */}
-        {phase !== 'setup' && phase !== 'consent' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
+        {phase !== 'setup' && phase !== 'experimentInfo' && phase !== 'consent' && phase !== 'instructions' && phase !== 'practiceConfirmation' && phase !== 'intermission' && (
           <TopBar
             mode={mode}
             progressPercent={progressPercent}
@@ -1087,7 +1088,7 @@ function App() {
                     )}
 
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <PrimaryButton onClick={startExperiment}>同意確認へ進む</PrimaryButton>
+                      <PrimaryButton onClick={startExperiment}>実験説明へ進む</PrimaryButton>
                       <SecondaryButton onClick={requestMic}>マイク権限を再確認</SecondaryButton>
                     </div>
                   </div>
@@ -1112,11 +1113,32 @@ function App() {
             </CardShell>
           )}
 
+          {phase === 'experimentInfo' && (
+            <CardShell className="max-w-7xl text-center">
+              <div className="space-y-10">
+                <div className="space-y-8">
+                  <h1 className="text-6xl font-semibold tracking-tight text-slate-900 sm:text-7xl">実験説明</h1>
+                  <div className="mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-white px-8 py-10 shadow-sm">
+                    <p className="text-4xl font-semibold leading-[1.35] text-slate-900">
+                      東京大学 大学院新領域創成科学研究科 人間環境学専攻
+                    </p>
+                    <p className="mt-5 text-4xl font-semibold leading-[1.35] text-slate-900">
+                      革新的学びの創造学寄付講座　修士課程1年
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col-reverse justify-center gap-3 pt-4 sm:flex-row">
+                  <SecondaryButton onClick={() => setPhase('setup')}>戻る</SecondaryButton>
+                  <PrimaryButton onClick={() => setPhase('consent')}>同意確認へ進む</PrimaryButton>
+                </div>
+              </div>
+            </CardShell>
+          )}
+
           {phase === 'consent' && (
             <CardShell className="max-w-7xl">
               <div className="space-y-8">
                 <div className="space-y-3">
-                  <Badge>Consent Form</Badge>
                   <h1 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験参加と録音の同意確認</h1>
                   <p className="max-w-6xl text-2xl leading-9 text-slate-600">
                     実験の内容と録音について確認し、同意する場合のみ次へ進んでください。
@@ -1184,7 +1206,7 @@ function App() {
             <CardShell className="max-w-7xl">
               <div className="space-y-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <Badge>Instructions</Badge>
+                  <Badge>実験説明</Badge>
                   <div className="text-2xl font-semibold text-slate-500">
                     {instructionPageIndex + 1} / {INSTRUCTION_PAGES.length}
                   </div>
