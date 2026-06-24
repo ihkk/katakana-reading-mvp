@@ -127,17 +127,17 @@ const PRACTICE_STIMULI: StimulusItem[] = [
 // formal stimuli
 const MAIN_STIMULI: StimulusItem[] = [
   { id: 'w001', text: 'ラスト' },
-  // { id: 'w002', text: 'こもの' },
-  // { id: 'w003', text: 'フロア' },
-  // { id: 'w004', text: 'たから' },
-  // { id: 'w005', text: 'ガイドライン' },
-  // { id: 'w006', text: 'おおよろこび' },
-  // { id: 'w007', text: 'クリーニング' },
-  // { id: 'w008', text: 'おさななじみ' },
-  // { id: 'w009', text: 'スーパーマーケット' },
-  // { id: 'w010', text: 'のうりんぎょぎょう' },
-  // { id: 'w011', text: 'リハビリテーション' },
-  // { id: 'w012', text: 'にゅうしゅつりょく' },
+  { id: 'w002', text: 'こもの' },
+  { id: 'w003', text: 'フロア' },
+  { id: 'w004', text: 'たから' },
+  { id: 'w005', text: 'ガイドライン' },
+  { id: 'w006', text: 'おおよろこび' },
+  { id: 'w007', text: 'クリーニング' },
+  { id: 'w008', text: 'おさななじみ' },
+  { id: 'w009', text: 'スーパーマーケット' },
+  { id: 'w010', text: 'のうりんぎょぎょう' },
+  { id: 'w011', text: 'リハビリテーション' },
+  { id: 'w012', text: 'にゅうしゅつりょく' },
 ];
 
 function shuffle<T>(arr: T[]): T[] {
@@ -404,14 +404,14 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Step 1',
     title: '単語を声に出して読みます',
-    body: '画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに Space キーを押します。',
+    body: '画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに Space キーを押してください。',
     warning: '単語の読み上げの声は録音されます。',
     visual: 'reading',
   },
   {
     badge: 'Step 2',
     title: '意味や例文を声で答えます',
-    body: '同じ単語について、意味を説明するか、この単語を使った文を作ってください。答え終わったら Space キーを押します。',
+    body: '同じ単語について、意味を説明するか、この単語を使った文を作ってください。答え終わったら Space キーを押してください。',
     warning: '意味や例文を答える声は録音されます。',
     visual: 'meaning',
   },
@@ -1607,7 +1607,6 @@ function BackgroundSurveyForm({
     japaneseNative !== '' &&
     (japaneseNative === 'yes' || trimmedLearningPeriod.length > 0) &&
     (japaneseNative === 'yes' || trimmedCertification.length > 0) &&
-    trimmedEnglish.length > 0 &&
     (!needsOtherLanguageDetail || trimmedOtherLanguageDetail.length > 0);
 
   function toggleOtherLanguage(language: string) {
