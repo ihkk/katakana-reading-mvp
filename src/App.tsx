@@ -7,7 +7,7 @@ import illustrationStep3 from './assets/illustration_step3.png';
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
  * setup -> experiment info -> consent -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
- * Loop: ready -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
+ * Loop: ready -> standby -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
 type Phase =
@@ -17,6 +17,7 @@ type Phase =
   | 'instructions'
   | 'practiceConfirmation'
   | 'ready'
+  | 'standby'
   | 'countdown'
   | 'recording'
   | 'meaningRecording'
@@ -38,8 +39,12 @@ type StimulusItem = {
 type SurveyResponse = {
   familiarity: number;
   confidence: number;
-  exposureFreq: number;
-  useFreq: number;
+  listeningFreq: number;
+  speakingFreq: number;
+  paperReadingFreq: number;
+  handwritingFreq: number;
+  screenReadingFreq: number;
+  digitalInputFreq: number;
 };
 
 type BackgroundSurveyResponse = {
@@ -356,7 +361,7 @@ type InstructionVisualType = 'reading' | 'meaning' | 'rating' | 'practice';
 type InstructionPage = {
   badge: string;
   title: string;
-  body: string;
+  body: React.ReactNode;
   note?: string;
   warning?: string;
   visual: InstructionVisualType;
@@ -365,9 +370,9 @@ type InstructionPage = {
 const SURVEY_QUESTIONS: SurveyQuestion[] = [
   {
     key: 'familiarity',
-    prompt: (stimulus) => `「${stimulus}」という単語について、\n見覚えや聞き覚えはどのくらいありますか`,
-    lowLabel: 'まったく見覚えがない',
-    highLabel: 'よく知っている単語だと感じる',
+    prompt: (stimulus) => `「${stimulus}」という単語について、\nどのくらいなじみがありますか`,
+    lowLabel: 'まったくなじみがない',
+    highLabel: 'とてもなじみがある',
   },
   {
     key: 'confidence',
@@ -376,16 +381,40 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
     highLabel: 'とても自信がある',
   },
   {
-    key: 'exposureFreq',
-    prompt: (stimulus) => `普段、会話・授業・メディア・インターネットなどで\n「${stimulus}」という単語をどのくらい見たり聞いたりしますか`,
-    lowLabel: 'ほとんどない',
-    highLabel: 'とてもよくある',
+    key: 'listeningFreq',
+    prompt: (stimulus) => `普段、会話・授業・動画・ニュースなどで、\n「${stimulus}」という単語をどのくらい聞きますか`,
+    lowLabel: 'ほとんど聞かない',
+    highLabel: 'とてもよく聞く',
   },
   {
-    key: 'useFreq',
-    prompt: (stimulus) => `普段、話す・書く・入力する場面で、\n「${stimulus}」という単語をどのくらい使いますか`,
+    key: 'speakingFreq',
+    prompt: (stimulus) => `普段、会話や発表などで、\n「${stimulus}」という単語をどのくらい使いますか`,
     lowLabel: 'ほとんど使わない',
     highLabel: 'とてもよく使う',
+  },
+  {
+    key: 'paperReadingFreq',
+    prompt: (stimulus) => `普段、本・新聞・紙の資料などで、\n「${stimulus}」という単語をどのくらい見たり読んだりしますか`,
+    lowLabel: 'ほとんど見ない・読まない',
+    highLabel: 'とてもよく見る・読む',
+  },
+  {
+    key: 'handwritingFreq',
+    prompt: (stimulus) => `普段、手書きで、\n「${stimulus}」という単語をどのくらい書きますか`,
+    lowLabel: 'ほとんど書かない',
+    highLabel: 'とてもよく書く',
+  },
+  {
+    key: 'screenReadingFreq',
+    prompt: (stimulus) => `普段、ウェブサイト・SNS・電子書籍などの画面で、\n「${stimulus}」という単語をどのくらい見たり読んだりしますか`,
+    lowLabel: 'ほとんど見ない・読まない',
+    highLabel: 'とてもよく見る・読む',
+  },
+  {
+    key: 'digitalInputFreq',
+    prompt: (stimulus) => `普段、スマートフォンやPCで、\n「${stimulus}」という単語をどのくらい入力しますか`,
+    lowLabel: 'ほとんど入力しない',
+    highLabel: 'とてもよく入力する',
   },
 ];
 
@@ -404,14 +433,26 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Step 1',
     title: '単語を声に出して読みます',
-    body: '画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに Space キーを押してください。',
+    body: (
+      <>
+        画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに
+        <SpaceKeyBadge />
+        を押してください。
+      </>
+    ),
     warning: '単語の読み上げの声は録音されます。',
     visual: 'reading',
   },
   {
     badge: 'Step 2',
     title: '意味や例文を声で答えます',
-    body: '同じ単語について、意味を説明するか、この単語を使った文を作ってください。答え終わったら Space キーを押してください。',
+    body: (
+      <>
+        同じ単語について、意味を説明するか、この単語を使った文を作ってください。答え終わったら
+        <SpaceKeyBadge />
+        を押してください。
+      </>
+    ),
     warning: '意味や例文を答える声は録音されます。',
     visual: 'meaning',
   },
@@ -844,6 +885,10 @@ function App() {
     setTempMeaning(null);
     setIsMeaningRecording(false);
     meaningAutoStartKeyRef.current = '';
+    setPhase('standby');
+  }
+
+  function startCountdown() {
     setCountdown(3);
     setPhase('countdown');
   }
@@ -901,8 +946,12 @@ function App() {
       'meaningRtMs',
       'familiarity',
       'confidence',
-      'exposureFreq',
-      'useFreq',
+      'listeningFreq',
+      'speakingFreq',
+      'paperReadingFreq',
+      'handwritingFreq',
+      'screenReadingFreq',
+      'digitalInputFreq',
       'audioFile',
       'meaningAudioFile',
     ];
@@ -920,8 +969,12 @@ function App() {
       Math.round(r.meaningRtMs),
       r.responses.familiarity,
       r.responses.confidence,
-      r.responses.exposureFreq,
-      r.responses.useFreq,
+      r.responses.listeningFreq,
+      r.responses.speakingFreq,
+      r.responses.paperReadingFreq,
+      r.responses.handwritingFreq,
+      r.responses.screenReadingFreq,
+      r.responses.digitalInputFreq,
       r.audioFile,
       r.meaningAudioFile,
     ]);
@@ -1184,7 +1237,7 @@ function App() {
                       onChange={setWithdrawalConsent}
                       title="参加の任意性と同意撤回の確認"
                     >
-                      参加は任意であり、参加しない場合や同意を撤回する場合でも不利益はありません。撤回時は可能な範囲で記録とデータを破棄しますが、匿名化後や解析後は個別に破棄できない場合があります。
+                      この研究に協力するかどうかは自由意思に委ねられています。協力しない場合でも不利益は一切ありません。同意を撤回された場合、提供いただいた情報は破棄され、以後研究に用いられることはありません。
                     </ConsentCheck>
                   </div>
                 </div>
@@ -1203,8 +1256,8 @@ function App() {
           )}
 
           {phase === 'instructions' && (
-            <CardShell className="max-w-7xl">
-              <div className="space-y-10">
+            <CardShell className="min-h-[760px] max-w-7xl">
+              <div className="flex min-h-[700px] flex-col gap-10">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <Badge>実験説明</Badge>
                   <div className="text-2xl font-semibold text-slate-500">
@@ -1212,8 +1265,8 @@ function App() {
                   </div>
                 </div>
 
-                <div className="min-h-[420px] rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
-                  <div className="grid gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-center">
+                <div className="flex min-h-[420px] flex-1 rounded-3xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-10">
+                  <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-center">
                     <InstructionIllustration type={instructionPage.visual} />
 
                     <div className="space-y-8">
@@ -1305,11 +1358,24 @@ function App() {
                     準備ができたら開始してください
                   </h2>
                   <p className="text-4xl font-medium leading-10 text-slate-700">
-                    ボタンを押すとカウントダウンが始まり、そのあと単語が表示されます。
+                    ボタンを押すと、<SpaceKeyBadge />の準備画面に進みます。
                   </p>
                 </div>
                 <div className="flex justify-center pt-2">
                   <PrimaryButton onClick={startCurrentTrial}>開始する</PrimaryButton>
+                </div>
+              </div>
+            </CardShell>
+          )}
+
+          {phase === 'standby' && (
+            <CardShell className="max-w-7xl text-center">
+              <div className="space-y-10">
+                <h2 className="text-5xl font-semibold leading-tight text-slate-900 sm:text-6xl">
+                  <SpaceKeyBadge />に指を置いてお待ちください
+                </h2>
+                <div className="flex justify-center pt-2">
+                  <PrimaryButton onClick={startCountdown}>準備できました</PrimaryButton>
                 </div>
               </div>
             </CardShell>
@@ -1323,9 +1389,6 @@ function App() {
                 </div>
                 <div className="space-y-3">
                   <h2 className="text-5xl font-semibold text-slate-900">まもなく単語が表示されます</h2>
-                  <p className="text-3xl font-semibold text-slate-600">
-                    読む → Space
-                  </p>
                 </div>
               </div>
             </CardShell>
@@ -1344,7 +1407,7 @@ function App() {
                 <div className="space-y-3">
                   <p className="text-5xl font-semibold text-slate-900">読み上げてください</p>
                   <p className="text-4xl font-medium leading-10 text-slate-700">
-                    読み終わったら <span className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-slate-800">Space</span> キーを押してください。
+                    読み終わったら<SpaceKeyBadge />を押してください。
                   </p>
                 </div>
               </div>
@@ -1363,7 +1426,7 @@ function App() {
                 <div className="space-y-3">
                   <p className="text-5xl font-semibold text-slate-900">意味や例文を答えてください</p>
                   <p className="text-4xl font-medium leading-10 text-slate-700">
-                    答え終わったら <span className="rounded-xl border border-sky-200 bg-sky-100 px-4 py-2 text-sky-900">Space</span> キーを押してください。
+                    答え終わったら<SpaceKeyBadge />を押してください。
                   </p>
                 </div>
               </div>
@@ -1437,6 +1500,14 @@ function App() {
 }
 
 // ---- Sub Components ----
+
+function SpaceKeyBadge() {
+  return (
+    <span className="mx-1 inline-flex whitespace-nowrap rounded-xl border border-sky-200 bg-sky-50 px-3 py-1 font-semibold text-sky-900 shadow-sm">
+      Space キー
+    </span>
+  );
+}
 
 function InstructionIllustration({ type }: { type: InstructionVisualType }) {
   const illustrationSrcByType: Partial<Record<InstructionVisualType, string>> = {
@@ -1542,8 +1613,12 @@ function SurveyForm({
       onSubmit({
         familiarity: nextResponses.familiarity!,
         confidence: nextResponses.confidence!,
-        exposureFreq: nextResponses.exposureFreq!,
-        useFreq: nextResponses.useFreq!,
+        listeningFreq: nextResponses.listeningFreq!,
+        speakingFreq: nextResponses.speakingFreq!,
+        paperReadingFreq: nextResponses.paperReadingFreq!,
+        handwritingFreq: nextResponses.handwritingFreq!,
+        screenReadingFreq: nextResponses.screenReadingFreq!,
+        digitalInputFreq: nextResponses.digitalInputFreq!,
       });
       advanceTimerRef.current = null;
     }, 280);

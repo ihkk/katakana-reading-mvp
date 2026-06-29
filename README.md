@@ -11,8 +11,8 @@ This project supports a simple experiment flow:
 3. Confirm consent for experiment participation and audio recording.
 4. Read the experiment instructions.
 5. Confirm that the participant understands the instructions before practice, with an option to review them again.
-6. Complete 5 practice trials using the same flow as the main trials.
-7. Confirm that the participant is ready for the main trials, with an option to repeat the 5 practice trials.
+6. Complete 3 practice trials using the same flow as the main trials.
+7. Confirm that the participant is ready for the main trials, with an option to repeat the final practice trial.
 8. Complete the main trials in randomized order.
 9. Complete a final background questionnaire about Japanese and English language experience.
 10. Download the results JSON, CSV files, and all recorded audio files.
@@ -20,6 +20,7 @@ This project supports a simple experiment flow:
 Each trial contains:
 
 - A ready screen with a `開始する` button.
+- A standby screen with a `準備できました` confirmation button.
 - A 3-second countdown.
 - A displayed stimulus word.
 - A reading-aloud recording, stopped by pressing `Space`.
@@ -27,8 +28,12 @@ Each trial contains:
 - One-at-a-time 1-5 Likert questions:
   - Familiarity
   - Confidence in meaning understanding
-  - Exposure frequency
-  - Usage frequency
+  - Listening frequency
+  - Speaking frequency
+  - Reading frequency on paper
+  - Handwriting frequency
+  - Reading frequency on screens
+  - Digital input frequency
 
 The final background questionnaire records:
 
