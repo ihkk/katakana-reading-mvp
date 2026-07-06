@@ -19,8 +19,7 @@ This project supports a simple experiment flow:
 
 Each trial contains:
 
-- A ready screen with a `開始する` button.
-- A standby screen with a `準備できました` confirmation button.
+- A standby screen that confirms hand placement and starts the countdown with `Space`.
 - A 3-second countdown.
 - A displayed stimulus word.
 - A reading-aloud recording, stopped by pressing `Space`.

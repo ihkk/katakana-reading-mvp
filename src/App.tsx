@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import illustrationStep1 from './assets/illustration_step1.png';
 import illustrationStep2 from './assets/illustration_step2.png';
 import illustrationStep3 from './assets/illustration_step3.png';
@@ -7,7 +7,7 @@ import illustrationStep3 from './assets/illustration_step3.png';
  * Katakana Reading Experiment MVP (Light Theme + Instructions + Practice)
  * Flow:
  * setup -> experiment info -> consent -> instructions -> practice confirmation -> practice -> main confirmation -> main -> background survey -> done
- * Loop: ready -> standby -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
+ * Loop: standby -> countdown -> recording(read aloud) -> meaningRecording(oral meaning) -> survey(likert)
  */
 
 type Phase =
@@ -16,7 +16,6 @@ type Phase =
   | 'consent'
   | 'instructions'
   | 'practiceConfirmation'
-  | 'ready'
   | 'standby'
   | 'countdown'
   | 'recording'
@@ -351,7 +350,7 @@ function getStimulusTextSizeClass(text: string) {
 
 type SurveyQuestion = {
   key: keyof SurveyResponse;
-  prompt: (stimulus: string) => string;
+  prompt: (stimulus: string) => React.ReactNode;
   lowLabel: string;
   highLabel: string;
 };
@@ -382,37 +381,67 @@ const SURVEY_QUESTIONS: SurveyQuestion[] = [
   },
   {
     key: 'listeningFreq',
-    prompt: (stimulus) => `普段、会話・授業・動画・ニュースなどで、\n「${stimulus}」という単語をどのくらい聞きますか`,
+    prompt: (stimulus) => (
+      <>
+        普段、会話・授業・動画・ニュースなどで、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>聞き</SurveyVerb>ますか
+      </>
+    ),
     lowLabel: 'ほとんど聞かない',
     highLabel: 'とてもよく聞く',
   },
   {
     key: 'speakingFreq',
-    prompt: (stimulus) => `普段、会話や発表などで、\n「${stimulus}」という単語をどのくらい使いますか`,
-    lowLabel: 'ほとんど使わない',
-    highLabel: 'とてもよく使う',
+    prompt: (stimulus) => (
+      <>
+        普段、会話や発表などで、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>発話</SurveyVerb>しますか
+      </>
+    ),
+    lowLabel: 'ほとんど発話しない',
+    highLabel: 'とてもよく発話する',
   },
   {
     key: 'paperReadingFreq',
-    prompt: (stimulus) => `普段、本・新聞・紙の資料などで、\n「${stimulus}」という単語をどのくらい見たり読んだりしますか`,
+    prompt: (stimulus) => (
+      <>
+        普段、本・新聞・紙の資料などで、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>見たり読んだり</SurveyVerb>しますか
+      </>
+    ),
     lowLabel: 'ほとんど見ない・読まない',
     highLabel: 'とてもよく見る・読む',
   },
   {
     key: 'handwritingFreq',
-    prompt: (stimulus) => `普段、手書きで、\n「${stimulus}」という単語をどのくらい書きますか`,
+    prompt: (stimulus) => (
+      <>
+        普段、手書きで、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>書き</SurveyVerb>ますか
+      </>
+    ),
     lowLabel: 'ほとんど書かない',
     highLabel: 'とてもよく書く',
   },
   {
     key: 'screenReadingFreq',
-    prompt: (stimulus) => `普段、ウェブサイト・SNS・電子書籍などの画面で、\n「${stimulus}」という単語をどのくらい見たり読んだりしますか`,
+    prompt: (stimulus) => (
+      <>
+        普段、ウェブサイト・SNS・電子書籍などの画面で、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>見たり読んだり</SurveyVerb>しますか
+      </>
+    ),
     lowLabel: 'ほとんど見ない・読まない',
     highLabel: 'とてもよく見る・読む',
   },
   {
     key: 'digitalInputFreq',
-    prompt: (stimulus) => `普段、スマートフォンやPCで、\n「${stimulus}」という単語をどのくらい入力しますか`,
+    prompt: (stimulus) => (
+      <>
+        普段、スマートフォンやPCで、<br />
+        「{stimulus}」という単語をどのくらい<SurveyVerb>入力</SurveyVerb>しますか
+      </>
+    ),
     lowLabel: 'ほとんど入力しない',
     highLabel: 'とてもよく入力する',
   },
@@ -435,7 +464,7 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
     title: '単語を声に出して読みます',
     body: (
       <>
-        画面に単語が表示されます。単語が表示されたら、自然な速さで続けて読んでください。読み終わったら、すぐに
+        画面に単語が表示されます。単語が表示されたら、無理のない範囲で、できるだけ早く正確に読み上げてください。読み終わったら、すぐに
         <SpaceKeyBadge />
         を押してください。
       </>
@@ -459,7 +488,7 @@ const INSTRUCTION_PAGES: InstructionPage[] = [
   {
     badge: 'Step 3',
     title: 'アンケートで5段階評価に回答します',
-    body: 'アンケートは1問ずつ表示されます。1〜5 の数字を選ぶと、次の質問に進みます。',
+    body: 'アンケートは1問ずつ表示されます。マウスで1〜5 の数字を選ぶと、次の質問に進みます。',
     visual: 'rating',
   },
   {
@@ -620,7 +649,7 @@ function App() {
     setCurrentTrialIndex(0);
     setPracticeResults([]);
     setCountdown(3);
-    setPhase('ready');
+    setPhase('standby');
   }
 
   function repeatFinalPracticeTrial() {
@@ -628,7 +657,7 @@ function App() {
     setMode('practice');
     setCurrentTrialIndex(Math.max(orderedPracticeStimuli.length - 1, 0));
     setCountdown(3);
-    setPhase('ready');
+    setPhase('standby');
   }
 
   function beginMainExperiment() {
@@ -637,7 +666,7 @@ function App() {
     setCurrentTrialIndex(0);
     setMainResults([]);
     setCountdown(3);
-    setPhase('ready');
+    setPhase('standby');
   }
 
   function completeInstructionPages() {
@@ -865,7 +894,7 @@ function App() {
       } else {
         setCurrentTrialIndex((prev) => prev + 1);
         setCountdown(3);
-        setPhase('ready');
+        setPhase('standby');
       }
     } else {
       setMainResults((prev) => [...prev, result]);
@@ -875,23 +904,32 @@ function App() {
       } else {
         setCurrentTrialIndex((prev) => prev + 1);
         setCountdown(3);
-        setPhase('ready');
+        setPhase('standby');
       }
     }
   }
 
-  function startCurrentTrial() {
+  const startCountdown = useCallback(() => {
     setTempReading(null);
     setTempMeaning(null);
     setIsMeaningRecording(false);
     meaningAutoStartKeyRef.current = '';
-    setPhase('standby');
-  }
-
-  function startCountdown() {
     setCountdown(3);
     setPhase('countdown');
-  }
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'standby') return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.code !== 'Space' || event.repeat) return;
+      event.preventDefault();
+      startCountdown();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [phase, startCountdown]);
 
   function submitBackgroundSurvey(response: BackgroundSurveyResponse) {
     setBackgroundSurvey(response);
@@ -1194,7 +1232,16 @@ function App() {
                 <div className="space-y-3">
                   <h1 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">実験参加と録音の同意確認</h1>
                   <p className="max-w-6xl text-2xl leading-9 text-slate-600">
-                    実験の内容と録音について確認し、同意する場合のみ次へ進んでください。
+                    まずは、実験参加と録音の同意確認です。
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-6 py-5 text-2xl leading-9 text-sky-950">
+                  <p>
+                    現時点では、正式な倫理審査の同意書はまだ取得前のため、この実験は研究室内でのみ実施します。
+                  </p>
+                  <p className="mt-2">
+                    正式な同意書が準備できましたら、後日あらためて実験参加確認の署名をお願いする場合があります。
                   </p>
                 </div>
 
@@ -1219,13 +1266,6 @@ function App() {
 
                   <div className="space-y-4">
                     <ConsentCheck
-                      checked={participationConsent}
-                      onChange={setParticipationConsent}
-                      title="実験参加への同意"
-                    >
-                      実験の内容を確認し、参加することに同意します。
-                    </ConsentCheck>
-                    <ConsentCheck
                       checked={recordingConsent}
                       onChange={setRecordingConsent}
                       title="録音への同意"
@@ -1238,6 +1278,13 @@ function App() {
                       title="参加の任意性と同意撤回の確認"
                     >
                       この研究に協力するかどうかは自由意思に委ねられています。協力しない場合でも不利益は一切ありません。同意を撤回された場合、提供いただいた情報は破棄され、以後研究に用いられることはありません。
+                    </ConsentCheck>
+                    <ConsentCheck
+                      checked={participationConsent}
+                      onChange={setParticipationConsent}
+                      title="実験参加への同意"
+                    >
+                      実験の内容を確認し、参加することに同意します。
                     </ConsentCheck>
                   </div>
                 </div>
@@ -1337,6 +1384,8 @@ function App() {
                   </h2>
                   <p className="text-4xl font-medium leading-10 text-slate-700">
                     不明な点があれば、説明をもう一度確認できます。<br />
+                    単語が表示されたら、無理のない範囲で、<br />
+                    できるだけ早く正確に読み上げてください。<br />
                     準備ができたら練習を始めてください。
                   </p>
                 </div>
@@ -1350,33 +1399,15 @@ function App() {
             </CardShell>
           )}
 
-          {phase === 'ready' && (
-            <CardShell className="max-w-7xl text-center">
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <h2 className="text-5xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-                    準備ができたら開始してください
-                  </h2>
-                  <p className="text-4xl font-medium leading-10 text-slate-700">
-                    ボタンを押すと、<SpaceKeyBadge />の準備画面に進みます。
-                  </p>
-                </div>
-                <div className="flex justify-center pt-2">
-                  <PrimaryButton onClick={startCurrentTrial}>開始する</PrimaryButton>
-                </div>
-              </div>
-            </CardShell>
-          )}
-
           {phase === 'standby' && (
             <CardShell className="max-w-7xl text-center">
               <div className="space-y-10">
                 <h2 className="text-5xl font-semibold leading-tight text-slate-900 sm:text-6xl">
                   <SpaceKeyBadge />に指を置いてお待ちください
                 </h2>
-                <div className="flex justify-center pt-2">
-                  <PrimaryButton onClick={startCountdown}>準備できました</PrimaryButton>
-                </div>
+                <p className="text-4xl font-medium leading-10 text-slate-700">
+                  準備ができたら<SpaceKeyBadge />を押してください。
+                </p>
               </div>
             </CardShell>
           )}
@@ -1507,6 +1538,10 @@ function SpaceKeyBadge() {
       Space キー
     </span>
   );
+}
+
+function SurveyVerb({ children }: { children: React.ReactNode }) {
+  return <strong className="font-extrabold text-slate-950">{children}</strong>;
 }
 
 function InstructionIllustration({ type }: { type: InstructionVisualType }) {
@@ -1653,7 +1688,7 @@ function SurveyForm({
             戻る
           </SecondaryButton>
           <p className="text-2xl leading-9 text-slate-500">
-            {isLastQuestion ? '数字を選ぶと次の単語に進みます。' : '数字を選ぶと次の質問に進みます。'}
+            {isLastQuestion ? 'マウスで数字を選ぶと次の単語に進みます。' : 'マウスで数字を選ぶと次の質問に進みます。'}
           </p>
         </div>
       </div>
@@ -2004,7 +2039,7 @@ function LikertQuestion({
   onChange,
   disabled = false,
 }: {
-  prompt: string;
+  prompt: React.ReactNode;
   lowLabel: string;
   highLabel: string;
   value: number | null;
